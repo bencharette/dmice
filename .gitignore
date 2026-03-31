@@ -1,0 +1,6 @@
+*.i3
+*.npz
+*.parquet
+*.png
+last_output.txt
+*.Zone.Identifier

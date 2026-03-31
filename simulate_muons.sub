@@ -1,0 +1,23 @@
+# HTCondor submit file for the Prometheus muon simulation.
+# Submit from NPX: condor_submit simulate_muons.sub
+
+universe        = vanilla
+executable      = run_prometheus_condor.sh
+
+# Run from ~/dmice so that ./output/ and ./logs/ resolve correctly,
+# and so ~/prometheus and ~/dmice/output/ppc_tmp are reachable.
+initialdir      = $ENV(HOME)/dmice
+
+log             = $ENV(HOME)/dmice/logs/condor_$(Cluster).log
+output          = $ENV(HOME)/dmice/logs/condor_$(Cluster)_$(Process).out
+error           = $ENV(HOME)/dmice/logs/condor_$(Cluster)_$(Process).err
+
+request_cpus    = 1
+request_memory  = 4 GB
+request_disk    = 5 GB
+
+# PPC runs in CPU mode (device=-1), no GPU required.
+# Remove the comment below if you want to request a GPU node later:
+# request_gpus = 1
+
+queue 1

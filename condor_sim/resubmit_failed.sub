@@ -1,0 +1,49 @@
+# Resubmit file for AVX-failed jobs from batch 10323163
+# Failed processes: 1, 5, 6, 8, 10, 11, 14 (run numbers 2001, 2005, 2006, 2008, 2010, 2011, 2014)
+
+Universe       = vanilla
+GetEnv         = False
+request_cpus   = 1
+request_memory = 4GB
+request_disk   = 2GB
+
+# Require AVX-capable nodes — jaxlib is built with AVX and crashes on older CPUs
+requirements   = (TARGET.has_avx == True)
+
+Executable     = /home/bcharett/dmice/condor_sim/run_sim.sh
+Log     = /home/bcharett/dmice/condor_sim/logs/condor_resubmit.log
+
+Arguments = 1 100
+Output  = /home/bcharett/dmice/condor_sim/logs/run_1.out
+Error   = /home/bcharett/dmice/condor_sim/logs/run_1.err
+Queue 1
+
+Arguments = 5 100
+Output  = /home/bcharett/dmice/condor_sim/logs/run_5.out
+Error   = /home/bcharett/dmice/condor_sim/logs/run_5.err
+Queue 1
+
+Arguments = 6 100
+Output  = /home/bcharett/dmice/condor_sim/logs/run_6.out
+Error   = /home/bcharett/dmice/condor_sim/logs/run_6.err
+Queue 1
+
+Arguments = 8 100
+Output  = /home/bcharett/dmice/condor_sim/logs/run_8.out
+Error   = /home/bcharett/dmice/condor_sim/logs/run_8.err
+Queue 1
+
+Arguments = 10 100
+Output  = /home/bcharett/dmice/condor_sim/logs/run_10.out
+Error   = /home/bcharett/dmice/condor_sim/logs/run_10.err
+Queue 1
+
+Arguments = 11 100
+Output  = /home/bcharett/dmice/condor_sim/logs/run_11.out
+Error   = /home/bcharett/dmice/condor_sim/logs/run_11.err
+Queue 1
+
+Arguments = 14 100
+Output  = /home/bcharett/dmice/condor_sim/logs/run_14.out
+Error   = /home/bcharett/dmice/condor_sim/logs/run_14.err
+Queue 1

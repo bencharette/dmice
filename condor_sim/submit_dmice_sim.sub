@@ -1,0 +1,27 @@
+# HTCondor submit file — DMice targeted muon simulation
+# Submit from NPX: condor_submit submit_dmice_sim.sub
+#
+# Each job gets a unique run number = FIRST_RUN + Process.
+# 20 jobs × 100 events = 2,000 targeted muon events total.
+# At ~5-15 min/event on CPU, each job takes 8-25 hours — within Condor wall time.
+#
+# Run numbers 2000–2019 reserved for this batch.
+
+Universe       = vanilla
+GetEnv         = False
+request_cpus   = 1
+request_memory = 4GB
+request_disk   = 2GB
+
+# Require AVX-capable nodes — jaxlib is built with AVX and crashes on older CPUs
+requirements   = (TARGET.has_avx == True)
+
+Executable     = /home/bcharett/dmice/condor_sim/run_sim.sh
+Arguments      = $(Process) 100
+
+Output  = /home/bcharett/dmice/condor_sim/logs/run_$(Process).out
+Error   = /home/bcharett/dmice/condor_sim/logs/run_$(Process).err
+Log     = /home/bcharett/dmice/condor_sim/logs/condor.log
+
+# 20 parallel jobs
+Queue 20
