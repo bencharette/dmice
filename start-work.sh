@@ -19,7 +19,7 @@ tmux send-keys -t "$SESSION" "nvim-dmice-$MACHINE" Enter
 tmux split-window -h -t "$SESSION"
 
 # Start Claude Code in right pane
-tmux send-keys -t "$SESSION" "claude-code ~/dmice" Enter
+tmux send-keys -t "$SESSION" "claude ~/dmice" Enter
 
 # Select left pane (Neovim)
 tmux select-pane -t "$SESSION:0.0"

@@ -178,6 +178,7 @@ condor_q              # Check job queue
 nvim-dmice-cobalt     # Open Cobalt Neovim profile
 screen -S <name>      # Start long-running session
 python script.py      # Run scripts interactively
+steamshovel <file.i3> # Open IceCube event viewer (source IceTray env first)
 ```
 
 **Primary tasks:**
@@ -196,6 +197,19 @@ ssh pub                    # Connect to pub bastion
 ```
 
 All connections route through `pub.icecube.wisc.edu` via ProxyJump.
+
+---
+
+## Steamshovel (IceCube Event Viewer)
+
+Runs on Cobalt only. Source the IceTray environment first, then launch:
+
+```bash
+source /cvmfs/icecube.opensciencegrid.org/py3-v4.3.0/RHEL_9_x86_64/metaprojects/icetray/v1.12.1/env-shell.sh
+steamshovel <file.i3>
+```
+
+Note: use `screen` for the session — do NOT use `nohup` with env-shell.sh.
 
 ---
 
