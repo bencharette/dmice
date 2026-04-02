@@ -119,9 +119,10 @@ def blo_npz_to_i3(input_npz, output_i3, geo_path=DEFAULT_GEO, run_id=2000):
         header.event_id = i
         frame["I3EventHeader"] = header
 
-        # zenith_rad is stored as angle of momentum from +z (0=up, π/2=horiz)
-        # I3Direction(zenith, azimuth) also uses momentum-from-+z → no flip needed
-        zen_ic  = float(zenith_rad[i])
+        # zenith_rad: angle of MOMENTUM from +z (0=up). batch_dm_ice_sim saves arccos(dz).
+        # I3Direction uses ANTI-MOMENTUM (incoming) convention → need π-flip for dir.
+        # Vertex backstep uses the actual momentum direction (no flip).
+        zen_mom = float(zenith_rad[i])   # momentum zenith from +z
         azi_ic  = float(azimuth_rad[i])
         ene     = float(energy_GeV[i])
 
@@ -131,18 +132,27 @@ def blo_npz_to_i3(input_npz, output_i3, geo_path=DEFAULT_GEO, run_id=2000):
         primary.location_type = dataclasses.I3Particle.InIce
         primary.shape         = dataclasses.I3Particle.InfiniteTrack
         primary.energy        = ene * I3Units.GeV
-        primary.dir           = dataclasses.I3Direction(zen_ic, azi_ic)
-        # Vertex: centroid of hit DOM positions (depth → IceCube z)
+        primary.dir           = dataclasses.I3Direction(np.pi - zen_mom, azi_ic)
+
+        # Step vertex back 1500 m along momentum direction from hit centroid
         _xs = dom_x[i]; _ys = dom_y[i]; _zs = dom_z[i]; _ts = dom_t[i]
         if len(_xs) > 0:
-            vx   = float(np.mean(_xs))
-            vy   = float(np.mean(_ys))
-            vz   = float(np.mean(_zs)) + Z_OFFSET
-            t0   = float(np.min(_ts))
+            cx = float(np.mean(_xs))
+            cy = float(np.mean(_ys))
+            cz = float(np.mean(_zs)) + Z_OFFSET
+            t0 = float(np.min(_ts))
         else:
-            vx, vy, vz, t0 = 0.0, 0.0, 0.0, 0.0
+            cx, cy, cz, t0 = 0.0, 0.0, 0.0, 0.0
+        BACKSTEP = 1500.0          # metres
+        C_M_NS   = 0.299792458     # speed of light m/ns
+        dx_mom = np.sin(zen_mom) * np.cos(azi_ic)
+        dy_mom = np.sin(zen_mom) * np.sin(azi_ic)
+        dz_mom = np.cos(zen_mom)           # > 0 = upgoing
+        vx = cx - BACKSTEP * dx_mom
+        vy = cy - BACKSTEP * dy_mom
+        vz = cz - BACKSTEP * dz_mom        # below centroid for upgoing
         primary.pos           = dataclasses.I3Position(vx, vy, vz)
-        primary.time          = t0 * I3Units.ns
+        primary.time          = (t0 - BACKSTEP / C_M_NS) * I3Units.ns
         mc_tree.add_primary(primary)
         frame["I3MCTree"] = mc_tree
 
