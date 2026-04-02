@@ -65,14 +65,23 @@ def blo_npz_to_i3(input_npz, output_i3, geo_path=DEFAULT_GEO, run_id=2000):
     energy_GeV  = d["energy_GeV"]
     zenith_rad  = d["zenith_rad"]   # Prometheus momentum convention
     azimuth_rad = d["azimuth_rad"]
-    dom_x       = d["dom_x"]
-    dom_y       = d["dom_y"]
-    dom_z       = d["dom_z"]        # depth coordinates
-    dom_t       = d["dom_t"]        # ns
-    dom_string  = d["dom_string"]
-    dom_sensor  = d["dom_sensor"]
     det_id      = d["det_id"]   if "det_id"   in d else ["unknown"] * n_events
     dir_type    = d["dir_type"] if "dir_type" in d else ["unknown"] * n_events
+
+    # Support both object-array format (numpy 2.x) and flat+offsets format (numpy 1.x compat)
+    def load_ragged(key):
+        if f"{key}_flat" in d:
+            flat    = d[f"{key}_flat"]
+            offsets = d[f"{key}_offsets"]
+            return [flat[offsets[i]:offsets[i+1]] for i in range(n_events)]
+        return d[key]
+
+    dom_x      = load_ragged("dom_x")
+    dom_y      = load_ragged("dom_y")
+    dom_z      = load_ragged("dom_z")      # depth coordinates
+    dom_t      = load_ragged("dom_t")      # ns
+    dom_string = load_ragged("dom_string")
+    dom_sensor = load_ragged("dom_sensor")
 
     print(f"[INFO] Events:   {n_events}")
 
