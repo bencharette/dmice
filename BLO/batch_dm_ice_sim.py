@@ -17,11 +17,17 @@ Usage (on WARD):
     python ~/dmice/batch_dm_ice_sim.py
 """
 
+import argparse
 import os
 import sys
 import numpy as np
 import juliacall
 from juliacall import Main as jl
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--nevents", type=int, default=None)
+parser.add_argument("--no-gpu", dest="gpu", action="store_false")
+args = parser.parse_args()
 
 # ── BLO environment ───────────────────────────────────────────────────────────
 
@@ -58,8 +64,8 @@ PROP_KM     = 3.0          # propagation distance — traverses all of IceCube
 INJECT_Z_KM = -2.5         # start below detector (IceCube bottom ~ -2.45 km)
 CENTRE_Z_KM = -1.950       # IceCube centre depth — tracks aimed here
 HIT_CUT     = 200          # minimum total DOM hits to accept an event
-N_TARGET    = 100          # stop after this many accepted events
-USE_GPU     = True
+N_TARGET    = args.nevents if args.nevents is not None else 100
+USE_GPU     = args.gpu
 
 rng = np.random.default_rng(seed=42)
 
@@ -152,11 +158,12 @@ while n_accepted < N_TARGET:
     ev_n_hits.append(total_hits)
     ev_n_doms.append(n_doms)
 
-    # positions and times — divide out units
-    ev_dom_x.append(np.array(uhits.pos.x) / float(jlx(1.0, jl.m)))
-    ev_dom_y.append(np.array(uhits.pos.y) / float(jlx(1.0, jl.m)))
-    ev_dom_z.append(np.array(uhits.pos.z) / float(jlx(1.0, jl.m)))
-    ev_dom_t.append(np.array(uhits.time)  / float(jlx(1.0, jl.ns)))
+    # positions and times — strip units on the Julia side
+    _ustrip = jl.seval("(unit, arr) -> Float64.(ustrip.(unit, arr))")
+    ev_dom_x.append(np.array(_ustrip(jl.m,  uhits.pos.x)))
+    ev_dom_y.append(np.array(_ustrip(jl.m,  uhits.pos.y)))
+    ev_dom_z.append(np.array(_ustrip(jl.m,  uhits.pos.z)))
+    ev_dom_t.append(np.array(_ustrip(jl.ns, uhits.time)))
     ev_dom_nhit.append(nhits_arr)
     ev_dom_str.append(np.array(uhits.string_id))
     ev_dom_sen.append(np.array(uhits.sensor_id))

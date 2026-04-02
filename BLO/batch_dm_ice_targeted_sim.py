@@ -42,6 +42,7 @@ parser.add_argument("--direction", type=str,   default="both", choices=["up", "d
 parser.add_argument("--outdir",    type=str,   default=os.path.expanduser("~/dmice_work/output/"), help="Output directory")
 parser.add_argument("--no-gpu",    action="store_true", help="Use CPU PPC instead of GPU")
 parser.add_argument("--seed",      type=int,   default=42,    help="RNG seed (default: 42)")
+parser.add_argument("--logfile",   type=str,   default=None,  help="Tee progress to this file")
 args = parser.parse_args()
 
 USE_GPU    = not args.no_gpu
@@ -51,11 +52,20 @@ DIR_ARG    = args.direction
 OUTPUT_DIR = args.outdir
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+_logfile = open(args.logfile, "w", buffering=1) if args.logfile else None
+
+def log(msg):
+    print(msg, flush=True)
+    if _logfile:
+        print(msg, file=_logfile, flush=True)
+
 # ── BLO environment ───────────────────────────────────────────────────────────
 
 BLO_DIR = os.path.expanduser("~/.icevenv/BLO")
 
-print("[INFO] Activating BLO Julia environment...")
+log("[INFO] Activating BLO Julia environment...")
 jl.seval(f"""
 using Pkg
 Pkg.activate("{BLO_DIR}")
@@ -167,12 +177,12 @@ rng = np.random.default_rng(seed=args.seed)
 n_simulated = 0
 n_accepted  = 0
 
-print(f"[INFO] Target:    {N_TARGET} accepted events")
-print(f"[INFO] Detectors: {det_list}")
-print(f"[INFO] Direction: {dir_list}")
-print(f"[INFO] GPU:       {USE_GPU}")
-print(f"[INFO] Output:    {output_file}")
-print()
+log(f"[INFO] Target:    {N_TARGET} accepted events")
+log(f"[INFO] Detectors: {det_list}")
+log(f"[INFO] Direction: {dir_list}")
+log(f"[INFO] GPU:       {USE_GPU}")
+log(f"[INFO] Output:    {output_file}")
+log("")
 
 while n_accepted < N_TARGET:
 
@@ -205,7 +215,7 @@ while n_accepted < N_TARGET:
                                  suppress_error=True, use_gpu=USE_GPU)
         uhits      = BLO.process_hits(hits)
     except Exception as exc:
-        print(f"  [WARN] sim {n_simulated+1} error: {exc}")
+        log(f"  [WARN] sim {n_simulated+1} error: {exc}")
         n_simulated += 1
         continue
 
@@ -229,18 +239,16 @@ while n_accepted < N_TARGET:
     ev_det_id.append(det)
     ev_dir_type.append(dir_typ)
 
-    m_per_unit = float(jlx(1.0, jl.m))
-    ns_per_unit = float(jlx(1.0, jl.ns))
-
-    ev_dom_x.append(np.array(uhits.pos.x) / m_per_unit)
-    ev_dom_y.append(np.array(uhits.pos.y) / m_per_unit)
-    ev_dom_z.append(np.array(uhits.pos.z) / m_per_unit)
-    ev_dom_t.append(np.array(uhits.time)  / ns_per_unit)
+    _ustrip = jl.seval("(unit, arr) -> Float64.(ustrip.(unit, arr))")
+    ev_dom_x.append(np.array(_ustrip(jl.m,  uhits.pos.x)))
+    ev_dom_y.append(np.array(_ustrip(jl.m,  uhits.pos.y)))
+    ev_dom_z.append(np.array(_ustrip(jl.m,  uhits.pos.z)))
+    ev_dom_t.append(np.array(_ustrip(jl.ns, uhits.time)))
     ev_dom_nhit.append(nhits_arr)
     ev_dom_str.append(np.array(uhits.string_id))
     ev_dom_sen.append(np.array(uhits.sensor_id))
 
-    print(f"  [{n_accepted:>3}/{N_TARGET}]  "
+    log(f"  [{n_accepted:>3}/{N_TARGET}]  "
           f"tried={n_simulated:<5}  "
           f"{det}  {dir_typ:>4}  "
           f"E={ene_GeV/1e3:>7.2f} TeV  "
@@ -249,10 +257,10 @@ while n_accepted < N_TARGET:
 
 # ── Save ──────────────────────────────────────────────────────────────────────
 
-print()
+log("")
 efficiency = 100.0 * n_accepted / n_simulated
-print(f"[INFO] {n_accepted}/{n_simulated} accepted  (efficiency {efficiency:.1f}%)")
-print(f"[INFO] Saving to {output_file}")
+log(f"[INFO] {n_accepted}/{n_simulated} accepted  (efficiency {efficiency:.1f}%)")
+log(f"[INFO] Saving to {output_file}")
 
 np.savez(
     output_file,
@@ -272,12 +280,12 @@ np.savez(
     dom_sensor  = np.array(ev_dom_sen,  dtype=object),
 )
 
-print(f"[INFO] Done — {n_accepted} events saved to {output_file}")
-print()
-print("To reload:")
-print(f"  import numpy as np")
-print(f"  d = np.load('{output_file}', allow_pickle=True)")
-print(f"  d['energy_GeV']   # shape ({n_accepted},)")
-print(f"  d['det_id']       # 'det1' or 'det2' per event")
-print(f"  d['dir_type']     # 'up' or 'down' per event")
-print(f"  d['dom_x'][0]     # x positions of hit DOMs in event 0  [m]")
+log(f"[INFO] Done — {n_accepted} events saved to {output_file}")
+log("")
+log("To reload:")
+log(f"  import numpy as np")
+log(f"  d = np.load('{output_file}', allow_pickle=True)")
+log(f"  d['energy_GeV']   # shape ({n_accepted},)")
+log(f"  d['det_id']       # 'det1' or 'det2' per event")
+log(f"  d['dir_type']     # 'up' or 'down' per event")
+log(f"  d['dom_x'][0]     # x positions of hit DOMs in event 0  [m]")
