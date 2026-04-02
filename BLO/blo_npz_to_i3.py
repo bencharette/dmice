@@ -46,11 +46,12 @@ def load_geo(geo_path):
             if len(parts) < 5:
                 continue
             try:
-                string_id = int(parts[0])
-                dom_id    = int(parts[1])
-                x         = float(parts[2])
-                y         = float(parts[3])
-                z_depth   = float(parts[4])
+                # Format: x y z_depth string_id dom_id
+                x         = float(parts[0])
+                y         = float(parts[1])
+                z_depth   = float(parts[2])
+                string_id = int(parts[3])
+                dom_id    = int(parts[4])
                 doms[(string_id, dom_id)] = (x, y, z_depth + Z_OFFSET)
             except ValueError:
                 continue
