@@ -77,19 +77,21 @@ def npz_to_i3(input_npz: str, output_i3: str) -> None:
         z = float(data["z"][i]) if "z" in data else 0.0
 
         primary.energy = energy * I3Units.GeV
-        primary.dir = dataclasses.I3Direction(zenith, azimuth)
+        primary.dir = dataclasses.I3Direction(np.pi - zenith, azimuth)
         primary.pos = dataclasses.I3Position(x * I3Units.m, y * I3Units.m,
                                               (z + Z_OFFSET) * I3Units.m)
+
+        string_ids = data[f"ev_{i}_string_id"]
+        sensor_ids = data[f"ev_{i}_sensor_id"]
+        times      = data[f"ev_{i}_t"]
+
+        primary.time = float(np.min(times)) if len(times) > 0 else 0.0
 
         mc_tree.add_primary(primary)
         frame["I3MCTree"] = mc_tree
 
         # Photon hits → I3MCPESeriesMap
         mcpe_map = simclasses.I3MCPESeriesMap()
-
-        string_ids = data[f"ev_{i}_string_id"]
-        sensor_ids = data[f"ev_{i}_sensor_id"]
-        times      = data[f"ev_{i}_t"]
 
         dom_hits = defaultdict(list)
         for s, d, t in zip(string_ids, sensor_ids, times):

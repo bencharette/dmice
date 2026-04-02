@@ -133,6 +133,8 @@ def blo_npz_to_i3(input_npz, output_i3, geo_path=DEFAULT_GEO, run_id=2000):
         primary.dir           = dataclasses.I3Direction(zen_ic, azi_ic)
         # Approximate vertex: DM-Ice depth z converted to IceCube z
         primary.pos           = dataclasses.I3Position(0.0, 0.0, 0.0)
+        t0 = float(np.min(dom_t[i])) if len(dom_t[i]) > 0 else 0.0
+        primary.time          = t0 * I3Units.ns
         mc_tree.add_primary(primary)
         frame["I3MCTree"] = mc_tree
 
