@@ -131,9 +131,16 @@ def blo_npz_to_i3(input_npz, output_i3, geo_path=DEFAULT_GEO, run_id=2000):
         primary.shape         = dataclasses.I3Particle.InfiniteTrack
         primary.energy        = ene * I3Units.GeV
         primary.dir           = dataclasses.I3Direction(zen_ic, azi_ic)
-        # Approximate vertex: DM-Ice depth z converted to IceCube z
-        primary.pos           = dataclasses.I3Position(0.0, 0.0, 0.0)
-        t0 = float(np.min(dom_t[i])) if len(dom_t[i]) > 0 else 0.0
+        # Vertex: centroid of hit DOM positions (depth → IceCube z)
+        _xs = dom_x[i]; _ys = dom_y[i]; _zs = dom_z[i]; _ts = dom_t[i]
+        if len(_xs) > 0:
+            vx   = float(np.mean(_xs))
+            vy   = float(np.mean(_ys))
+            vz   = float(np.mean(_zs)) + Z_OFFSET
+            t0   = float(np.min(_ts))
+        else:
+            vx, vy, vz, t0 = 0.0, 0.0, 0.0, 0.0
+        primary.pos           = dataclasses.I3Position(vx, vy, vz)
         primary.time          = t0 * I3Units.ns
         mc_tree.add_primary(primary)
         frame["I3MCTree"] = mc_tree
