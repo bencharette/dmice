@@ -119,8 +119,9 @@ def blo_npz_to_i3(input_npz, output_i3, geo_path=DEFAULT_GEO, run_id=2000):
         header.event_id = i
         frame["I3EventHeader"] = header
 
-        # MC truth — convert Prometheus momentum zenith → IceCube anti-momentum
-        zen_ic  = float(np.pi - zenith_rad[i])
+        # zenith_rad is stored as angle of momentum from +z (0=up, π/2=horiz)
+        # I3Direction(zenith, azimuth) also uses momentum-from-+z → no flip needed
+        zen_ic  = float(zenith_rad[i])
         azi_ic  = float(azimuth_rad[i])
         ene     = float(energy_GeV[i])
 
