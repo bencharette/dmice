@@ -45,6 +45,7 @@ def npz_to_i3(input_npz: str, output_i3: str) -> None:
             omgeo.position = dataclasses.I3Position(
                 float(px), float(py), float(pz) + Z_OFFSET
             )
+            omgeo.omtype = dataclasses.I3OMGeo.IceCube
             geo.omgeo[omkey] = omgeo
         geo_frame['I3Geometry'] = geo
         print(f"[INFO] Geometry: {len(string_ids_geo)} DOMs")

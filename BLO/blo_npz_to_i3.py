@@ -99,6 +99,7 @@ def blo_npz_to_i3(input_npz, output_i3, geo_path=DEFAULT_GEO, run_id=2000):
             omkey = icetray.OMKey(s, dom)
             omgeo = dataclasses.I3OMGeo()
             omgeo.position = dataclasses.I3Position(px, py, pz_ic)
+            omgeo.omtype = dataclasses.I3OMGeo.IceCube
             geo.omgeo[omkey] = omgeo
         print(f"[INFO] Geometry: {len(doms_geo)} DOMs from {os.path.basename(geo_path)}")
     else:
