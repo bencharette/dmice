@@ -245,8 +245,10 @@ class ComputeDMIceTransitTime(icetray.I3Module):
         r_bar = np.array([np.dot(w, x_list), np.dot(w, y_list), np.dot(w, z_list)]) / W
         t_bar = np.dot(w, t_list) / W
 
-        # Distance from IC centroid to DM-Ice along MC track
-        d = np.dot(dm_pos - r_bar, mc_dir)
+        # Distance from IC centroid to DM-Ice along MC track.
+        # I3Direction stores anti-momentum direction; negate to get travel direction.
+        mc_travel = -mc_dir
+        d = np.dot(dm_pos - r_bar, mc_travel)
         t_dm = t_bar + d / C_M_NS
 
         frame['DMIceTransitTime_ns'] = dataclasses.I3Double(t_dm)
@@ -329,7 +331,8 @@ def main():
         W = np.sum(w)
         r_bar = np.array([np.dot(w, x_list), np.dot(w, y_list), np.dot(w, z_list)]) / W
         t_bar = np.dot(w, t_list) / W
-        d = np.dot(dm_pos - r_bar, mc_dir)
+        mc_travel = -mc_dir   # I3Direction is anti-momentum; negate for travel direction
+        d = np.dot(dm_pos - r_bar, mc_travel)
         t_dm = t_bar + d / C_M_NS
         frame['DMIceTransitTime_ns'] = dataclasses.I3Double(t_dm)
         return True

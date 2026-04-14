@@ -126,13 +126,19 @@ def blo_npz_to_i3(input_npz, output_i3, geo_path=DEFAULT_GEO, run_id=2000):
         azi_ic  = float(azimuth_rad[i])
         ene     = float(energy_GeV[i])
 
+        # Momentum direction components
+        dx_mom = np.sin(zen_mom) * np.cos(azi_ic)
+        dy_mom = np.sin(zen_mom) * np.sin(azi_ic)
+        dz_mom = np.cos(zen_mom)           # > 0 = upgoing
+
         mc_tree = dataclasses.I3MCTree()
         primary = dataclasses.I3Particle()
         primary.type          = dataclasses.I3Particle.MuMinus
         primary.location_type = dataclasses.I3Particle.InIce
         primary.shape         = dataclasses.I3Particle.InfiniteTrack
         primary.energy        = ene * I3Units.GeV
-        primary.dir           = dataclasses.I3Direction(np.pi - zen_mom, azi_ic)
+        primary.length        = 10000.0 * I3Units.m  # for steamshovel visualization
+        primary.dir           = dataclasses.I3Direction(dx_mom, dy_mom, dz_mom)
 
         # Step vertex back 1500 m along momentum direction from hit centroid
         _xs = dom_x[i]; _ys = dom_y[i]; _zs = dom_z[i]; _ts = dom_t[i]
@@ -145,12 +151,9 @@ def blo_npz_to_i3(input_npz, output_i3, geo_path=DEFAULT_GEO, run_id=2000):
             cx, cy, cz, t0 = 0.0, 0.0, 0.0, 0.0
         BACKSTEP = 1500.0          # metres
         C_M_NS   = 0.299792458     # speed of light m/ns
-        dx_mom = np.sin(zen_mom) * np.cos(azi_ic)
-        dy_mom = np.sin(zen_mom) * np.sin(azi_ic)
-        dz_mom = np.cos(zen_mom)           # > 0 = upgoing
         vx = cx - BACKSTEP * dx_mom
         vy = cy - BACKSTEP * dy_mom
-        vz = cz - BACKSTEP * dz_mom        # below centroid for upgoing
+        vz = cz - BACKSTEP * dz_mom        # behind centroid along momentum
         primary.pos           = dataclasses.I3Position(vx, vy, vz)
         primary.time          = (t0 - BACKSTEP / C_M_NS) * I3Units.ns
         mc_tree.add_primary(primary)

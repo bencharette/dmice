@@ -36,17 +36,15 @@ def mc_travel_dir(zenith_rad, azimuth_rad):
     """
     Convert Prometheus MC truth zenith/azimuth to travel direction vector.
 
-    Prometheus stores zenith/azimuth in IceCube 'from' convention
-    (zenith=0 = coming from above = downgoing track).
-    The actual travel direction is the negative of this 'from' vector.
+    Prometheus parquet stores initial_state_zenith/azimuth in the Prometheus
+    momentum convention (zenith=0 = traveling up, zenith=180 = traveling down).
+    The momentum direction IS the travel direction — no negation needed.
     """
     sz = np.sin(zenith_rad)
     cz = np.cos(zenith_rad)
     sa = np.sin(azimuth_rad)
     ca = np.cos(azimuth_rad)
-    # from-direction: (sz*ca, sz*sa, cz)
-    # travel direction: negated
-    return np.array([-sz * ca, -sz * sa, -cz])
+    return np.array([sz * ca, sz * sa, cz])
 
 
 def angular_diff_deg(d1, d2):

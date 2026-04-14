@@ -5,3 +5,4 @@
 - [feedback_comparison_script.md](feedback_comparison_script.md) — Always use sim_linefit_comparison.py from /home/bench/dmice/, not dmice_results version
 - [reference_onboarding.md](reference_onboarding.md) — How to onboard a new Claude instance: paste project_dmice.md at the start of a new conversation
 - [reference_github.md](reference_github.md) — GitHub URLs for dmice repo (bencharette/dmice) and BLO package (kcarloni/BlueLightOrchestra.jl)
+- [project_blo_i3_conversion.md](project_blo_i3_conversion.md) — BLO NPZ to I3 conversion: all bugs fixed, steamshovel display working

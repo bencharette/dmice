@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Compare IC-only LineFit vs IC+DM-Ice pivot LineFit vs MC truth on simulated muons.
+Compare IC-only LineFit vs IC+DM-Ice Pivot LineFit vs MC truth on simulated muons.
 
-Supports BLO-format I3 files (from blo_npz_to_i3.py).  BLO files store the
+Supports BLO-format I3 files (from blo_npz_to_i3.py). BLO files store the
 momentum direction directly in primary.dir (no anti-momentum flip).
 
 For each event:
@@ -13,7 +13,7 @@ For each event:
 
 Run inside IceTray environment:
     /cvmfs/icecube.opensciencegrid.org/py3-v4.3.0/RHEL_9_x86_64/metaprojects/icetray/v1.12.1/env-shell.sh \
-        python sim_linefit_comparison.py -i blo_events.i3 -g gcdfile.i3.gz [--max-events N]
+        python npz_linefit_sim_comparison.py -i blo_events.i3 [--max-events N]
 """
 
 import os
@@ -42,7 +42,6 @@ PULSE_KEYS = ["SRTInIcePulses", "SplitInIcePulses", "InIcePulses",
               "UncleanedInIcePulses"]
 
 C_M_NS = 0.2998  # speed of light in m/ns
-C_ICE_M_NS = 0.22  # c / n_ice
 
 
 def run_ic_linefit(x, y, z, t, w):
@@ -65,10 +64,33 @@ def run_ic_linefit(x, y, z, t, w):
     if speed == 0:
         return None
     dx, dy, dz = vx / speed, vy / speed, vz / speed
-    zenith  = np.degrees(np.arccos(np.clip(-dz, -1.0, 1.0)))
-    azimuth = np.degrees(np.arctan2(-dy, -dx) % (2 * np.pi))
-    return dict(dx=dx, dy=dy, dz=dz, speed_m_ns=speed,
-                zenith_deg=zenith, azimuth_deg=azimuth)
+    return dict(dx=dx, dy=dy, dz=dz, speed_m_ns=speed)
+
+
+def run_dmice_pivot_linefit(x_dom, y_dom, z_dom, t_dom, w_dom,
+                            x_dm, y_dm, z_dm, t_dm_ns):
+    """
+    Pivot LineFit: the DM-Ice detector is the fixed reference in space AND time.
+
+        dt_i = t_i - t_dm
+        dr_i = r_i - r_dm
+        v = Σ(w_i * dt_i * dr_i) / Σ(w_i * dt_i²)
+    """
+    dt = t_dom - t_dm_ns
+    dr_x = x_dom - x_dm
+    dr_y = y_dom - y_dm
+    dr_z = z_dom - z_dm
+    denom = np.dot(w_dom, dt**2)
+    if denom == 0:
+        return None
+    vx = np.dot(w_dom * dt, dr_x) / denom
+    vy = np.dot(w_dom * dt, dr_y) / denom
+    vz = np.dot(w_dom * dt, dr_z) / denom
+    speed = np.sqrt(vx**2 + vy**2 + vz**2)
+    if speed == 0:
+        return None
+    dx, dy, dz = vx / speed, vy / speed, vz / speed
+    return dict(dx=dx, dy=dy, dz=dz, speed_m_ns=speed)
 
 
 def angular_diff_deg(d1, d2):
@@ -83,105 +105,12 @@ def compute_dmice_hit_time(x_dom, y_dom, z_dom, t_dom, w_dom, dm_pos, mc_dir):
 
     Uses the charge-weighted IC centroid as a reference point, then projects
     (dm_pos - centroid) onto the MC truth direction to get the travel time offset.
-    This is independent of the absolute DAQ time offset.
     """
     W = np.sum(w_dom)
     r_bar = np.array([np.dot(w_dom, x_dom), np.dot(w_dom, y_dom), np.dot(w_dom, z_dom)]) / W
     t_bar = np.dot(w_dom, t_dom) / W
     d = np.dot(dm_pos - r_bar, mc_dir)  # signed distance along track (m)
-    return t_bar + d / C_M_NS           # same time frame as t_dom
-
-
-def run_dmice_pivot_linefit_iterative(x_dom, y_dom, z_dom, t_dom, w_dom,
-                                      x_dm, y_dm, z_dm, t_dm_ns,
-                                      huber_sigma=200.0, max_iter=10):
-    """
-    Iterative DM-Ice pivot LineFit with Huber-style outlier down-weighting.
-
-    Matches PoleMuonLinefit characteristics:
-      1. Fit pivot LineFit to get direction + speed
-      2. Compute time residual for each hit: t_residual = dt_i - dot(dr_i, v_hat)/speed
-      3. Re-weight: w_new = w * min(1, huber_sigma / |residual|)
-      4. Repeat until direction converges
-
-    huber_sigma: residual scale in ns above which hits are down-weighted (~200 ns)
-    """
-    w = w_dom.copy()
-    prev_dir = None
-
-    for _ in range(max_iter):
-        dt = t_dom - t_dm_ns
-        dr_x = x_dom - x_dm
-        dr_y = y_dom - y_dm
-        dr_z = z_dom - z_dm
-
-        denom = np.dot(w, dt**2)
-        if denom == 0:
-            return None
-        vx = np.dot(w * dt, dr_x) / denom
-        vy = np.dot(w * dt, dr_y) / denom
-        vz = np.dot(w * dt, dr_z) / denom
-        speed = np.sqrt(vx**2 + vy**2 + vz**2)
-        if speed == 0:
-            return None
-
-        # Time residual: actual dt vs expected dt from track
-        t_expected = (dr_x * vx + dr_y * vy + dr_z * vz) / speed**2
-        residual = dt - t_expected
-
-        # Huber re-weighting
-        w = w_dom * np.minimum(1.0, huber_sigma / (np.abs(residual) + 1e-6))
-
-        # Check convergence
-        v_hat = np.array([vx, vy, vz]) / speed
-        if prev_dir is not None:
-            shift = np.degrees(np.arccos(np.clip(np.dot(v_hat, prev_dir), -1.0, 1.0)))
-            if shift < 0.01:
-                break
-        prev_dir = v_hat
-
-    dx, dy, dz = v_hat
-    zenith  = np.degrees(np.arccos(np.clip(-dz, -1.0, 1.0)))
-    azimuth = np.degrees(np.arctan2(-dy, -dx) % (2 * np.pi))
-    return dict(dx=dx, dy=dy, dz=dz, speed_m_ns=speed,
-                zenith_deg=zenith, azimuth_deg=azimuth)
-
-
-def run_dmice_pivot_linefit(x_dom, y_dom, z_dom, t_dom, w_dom,
-                            x_dm, y_dm, z_dm, t_dm_ns):
-    """
-    Pivot LineFit: the DM-Ice detector is the fixed reference in space AND time.
-
-    Positions are measured from r_dm and times from t_dm, so the fit is
-    constrained to pass through DM-Ice at t_dm.  This is the correct pivot
-    formulation:
-
-        dt_i = t_i - t_dm
-        dr_i = r_i - r_dm
-        v = Σ(w_i * dt_i * dr_i) / Σ(w_i * dt_i²)
-    """
-    dt = t_dom - t_dm_ns
-    dr_x = x_dom - x_dm
-    dr_y = y_dom - y_dm
-    dr_z = z_dom - z_dm
-
-    denom = np.dot(w_dom, dt**2)
-    if denom == 0:
-        return None
-
-    vx = np.dot(w_dom * dt, dr_x) / denom
-    vy = np.dot(w_dom * dt, dr_y) / denom
-    vz = np.dot(w_dom * dt, dr_z) / denom
-
-    speed = np.sqrt(vx**2 + vy**2 + vz**2)
-    if speed == 0:
-        return None
-
-    dx, dy, dz = vx / speed, vy / speed, vz / speed
-    zenith  = np.degrees(np.arccos(np.clip(-dz, -1.0, 1.0)))
-    azimuth = np.degrees(np.arctan2(-dy, -dx) % (2 * np.pi))
-    return dict(dx=dx, dy=dy, dz=dz, speed_m_ns=speed,
-                zenith_deg=zenith, azimuth_deg=azimuth)
+    return t_bar + d / C_M_NS
 
 
 def closest_approach_distance(pos, direction, point):
@@ -193,7 +122,7 @@ def closest_approach_distance(pos, direction, point):
 
 
 def extract_hits(frame, dom_pos):
-    """Extract charge-weighted pulses. Returns (x, y, z, t_abs_ns, w, n_doms)."""
+    """Extract charge-weighted pulses. Returns (x, y, z, t_ns, w, n_doms)."""
     pulse_map = None
     for key in PULSE_KEYS:
         if key in frame:
@@ -234,7 +163,7 @@ def extract_hits(frame, dom_pos):
 
 
 def get_primary_muon(frame):
-    """Get the primary muon from I3MCTree. Returns (direction, position, time) or None."""
+    """Get the primary muon from I3MCTree."""
     tree = None
     for key in ('I3MCTree', 'I3MCTree_preMuonProp'):
         if key in frame:
@@ -246,7 +175,6 @@ def get_primary_muon(frame):
     if not primaries:
         return None
 
-    # Find the highest-energy muon
     best = None
     best_energy = 0
     for p in tree:
@@ -256,21 +184,17 @@ def get_primary_muon(frame):
                 best = p
                 best_energy = p.energy
 
-    if best is None:
-        # Fall back to primary
-        best = primaries[0]
-
-    return best
+    return best if best is not None else primaries[0]
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Compare IC-only LineFit vs IC+DM-Ice LineFit vs MC truth')
+        description='Compare IC-only LineFit vs IC+DM-Ice Pivot LineFit vs MC truth')
     parser.add_argument('-i', '--input', required=True, help='Input i3 file')
     parser.add_argument('-g', '--gcd', default=None,
                         help='GCD file (optional; if omitted, geometry is read from the input file)')
     parser.add_argument('--max-events', type=int, default=0)
-    parser.add_argument('--output', default='sim_linefit_results.csv')
+    parser.add_argument('--output', default='npz_linefit_sim_results.csv')
     parser.add_argument('--plot', default=None, metavar='OUTPUT.png',
                         help='Save angular resolution histogram to this file')
     args = parser.parse_args()
@@ -310,31 +234,28 @@ def main():
 
         n_total += 1
 
-        # MC truth — I3MCTree lives in DAQ frame; try both Physics and cached DAQ
         muon = get_primary_muon(frame)
         if muon is None and current_daq is not None:
             muon = get_primary_muon(current_daq)
         if muon is None:
             continue
 
-        # BLO files store momentum direction directly in primary.dir (no anti-momentum flip).
-        mc_dir = np.array([muon.dir.x, muon.dir.y, muon.dir.z])   # travel direction
+        # BLO files store momentum direction directly in primary.dir
+        mc_dir = np.array([muon.dir.x, muon.dir.y, muon.dir.z])
         mc_pos = np.array([muon.pos.x, muon.pos.y, muon.pos.z])
-        mc_zenith = np.degrees(muon.dir.zenith)
+        mc_zenith  = np.degrees(muon.dir.zenith)
         mc_azimuth = np.degrees(muon.dir.azimuth)
-        mc_energy = muon.energy
+        mc_energy  = muon.energy
 
         # DM-Ice detector selection: prefer BLO_DetId tag, else use closest approach
+        ca_det1 = closest_approach_distance(mc_pos, mc_dir, DMICE_POS['det1'])
+        ca_det2 = closest_approach_distance(mc_pos, mc_dir, DMICE_POS['det2'])
+        ca_min  = min(ca_det1, ca_det2)
+
         if 'BLO_DetId' in frame:
             blo_det = str(frame['BLO_DetId'].value)
             closest_det = blo_det if blo_det in DMICE_POS else 'det1'
-            ca_det1 = closest_approach_distance(mc_pos, mc_dir, DMICE_POS['det1'])
-            ca_det2 = closest_approach_distance(mc_pos, mc_dir, DMICE_POS['det2'])
-            ca_min = min(ca_det1, ca_det2)
         else:
-            ca_det1 = closest_approach_distance(mc_pos, mc_dir, DMICE_POS['det1'])
-            ca_det2 = closest_approach_distance(mc_pos, mc_dir, DMICE_POS['det2'])
-            ca_min = min(ca_det1, ca_det2)
             closest_det = 'det1' if ca_det1 < ca_det2 else 'det2'
 
         if ca_min < 500:
@@ -354,14 +275,13 @@ def main():
 
         ic_dir = np.array([lf_ic['dx'], lf_ic['dy'], lf_ic['dz']])
         ic_ang_err = angular_diff_deg(mc_dir, ic_dir)
-        ic_speed = lf_ic['speed_m_ns']
+        ic_speed   = lf_ic['speed_m_ns']
 
-        cfit_ang_err = np.nan
+        # DM-Ice Pivot LineFit
+        cfit_ang_err  = np.nan
         cfit_ang_diff = np.nan
-        cfit_speed = np.nan
-        cfit_iter_ang_err = np.nan
+        cfit_speed    = np.nan
 
-        # mc_dir is travel direction (BLO convention); use directly for DM-Ice timing
         t_dm_ns = compute_dmice_hit_time(x, y, z, t_abs, w, dm_pos, mc_dir)
 
         cfit = run_dmice_pivot_linefit(
@@ -370,33 +290,24 @@ def main():
         )
         if cfit is not None:
             cdir = np.array([cfit['dx'], cfit['dy'], cfit['dz']])
-            cfit_ang_err = angular_diff_deg(mc_dir, cdir)
+            cfit_ang_err  = angular_diff_deg(mc_dir, cdir)
             cfit_ang_diff = angular_diff_deg(ic_dir, cdir)
-            cfit_speed = cfit['speed_m_ns']
-
-        cfit_iter = run_dmice_pivot_linefit_iterative(
-            x, y, z, t_abs, w,
-            dm_pos[0], dm_pos[1], dm_pos[2], t_dm_ns,
-        )
-        if cfit_iter is not None:
-            cdir_iter = np.array([cfit_iter['dx'], cfit_iter['dy'], cfit_iter['dz']])
-            cfit_iter_ang_err = angular_diff_deg(mc_dir, cdir_iter)
+            cfit_speed    = cfit['speed_m_ns']
 
         results.append(dict(
-            mc_zenith_deg=mc_zenith,
-            mc_azimuth_deg=mc_azimuth,
-            mc_energy_GeV=mc_energy,
-            mc_ca_det1_m=ca_det1,
-            mc_ca_det2_m=ca_det2,
-            mc_ca_min_m=ca_min,
-            closest_det=closest_det,
-            ic_speed_m_ns=ic_speed,
-            ic_ang_err_deg=ic_ang_err,
-            cfit_ang_err_deg=cfit_ang_err,
-            cfit_iter_ang_err_deg=cfit_iter_ang_err,
-            cfit_ang_diff_deg=cfit_ang_diff,
-            cfit_speed_m_ns=cfit_speed,
-            n_doms=n_doms,
+            mc_zenith_deg  = mc_zenith,
+            mc_azimuth_deg = mc_azimuth,
+            mc_energy_GeV  = mc_energy,
+            mc_ca_det1_m   = ca_det1,
+            mc_ca_det2_m   = ca_det2,
+            mc_ca_min_m    = ca_min,
+            closest_det    = closest_det,
+            n_doms         = n_doms,
+            ic_speed_m_ns  = ic_speed,
+            ic_ang_err_deg = ic_ang_err,
+            cfit_ang_err_deg  = cfit_ang_err,
+            cfit_ang_diff_deg = cfit_ang_diff,
+            cfit_speed_m_ns   = cfit_speed,
         ))
 
         if n_total % 100 == 0:
@@ -414,7 +325,7 @@ def main():
     print("════════════════════════════════════════════════════════")
 
     if not results:
-        print("No results — check that L2 processing produced LineFit.")
+        print("No results.")
         return
 
     import pandas as pd
@@ -436,16 +347,11 @@ def main():
         print("\n── DM-Ice improves direction? ──────────────────────────")
         print("  {} / {} ({:.1f}%)".format(
             improved.sum(), has_both.sum(), 100 * improved.mean()))
-        print("  IC-only LineFit median:          {:.2f} deg".format(
+        print("  IC-only LineFit median:      {:.2f} deg".format(
             df.loc[has_both, 'ic_ang_err_deg'].median()))
-        print("  DM-Ice Pivot LineFit median:     {:.2f} deg".format(
+        print("  DM-Ice Pivot LineFit median: {:.2f} deg".format(
             df.loc[has_cfit, 'cfit_ang_err_deg'].median()))
-        has_iter = df['cfit_iter_ang_err_deg'].notna()
-        if has_iter.any():
-            print("  DM-Ice Pivot Iterative median:   {:.2f} deg".format(
-                df.loc[has_iter, 'cfit_iter_ang_err_deg'].median()))
 
-    # Break down by distance to DM-Ice
     print("\n── Angular error by distance to DM-Ice ─────────────────")
     bins = [0, 100, 200, 500, 1000, 5000]
     df['ca_bin'] = pd.cut(df['mc_ca_min_m'], bins)
@@ -458,25 +364,19 @@ def main():
                 grp.loc[has, 'cfit_ang_err_deg'].median(),
                 grp.loc[has, 'cfit_ang_diff_deg'].median()))
 
-    # Save
     df.to_csv(args.output, index=False)
     print("\nSaved {} rows to {}".format(len(df), args.output))
 
-    # ── Overlaid angular resolution plot ──────────────────────────────────────
     if args.plot:
-        ic_err        = df['ic_ang_err_deg'].dropna()
-        cfit_err      = df['cfit_ang_err_deg'].dropna()
-        cfit_iter_err = df['cfit_iter_ang_err_deg'].dropna()
+        ic_err   = df['ic_ang_err_deg'].dropna()
+        cfit_err = df['cfit_ang_err_deg'].dropna()
 
         max_err = max(ic_err.max() if len(ic_err) else 0,
-                      cfit_err.max() if len(cfit_err) else 0,
-                      cfit_iter_err.max() if len(cfit_iter_err) else 0)
+                      cfit_err.max() if len(cfit_err) else 0)
         bins = np.linspace(0, min(max_err * 1.05, 90), 46)
 
         fig, ax = plt.subplots(figsize=(9, 6))
-        fig.suptitle(
-            'Angular error vs MC truth  (n={} events)'.format(len(df)),
-            fontsize=13)
+        fig.suptitle('Angular error vs MC truth  (n={} events)'.format(len(df)), fontsize=13)
 
         if len(ic_err) > 0:
             ax.hist(ic_err, bins=bins, histtype='stepfilled', alpha=0.5,
@@ -490,18 +390,12 @@ def main():
                     label='DM-Ice Pivot LineFit  median={:.1f}°'.format(cfit_err.median()))
             ax.axvline(cfit_err.median(), color='darkred', linewidth=2, linestyle='--')
 
-        if len(cfit_iter_err) > 0:
-            ax.hist(cfit_iter_err, bins=bins, histtype='step', linewidth=2,
-                    color='darkorange',
-                    label='DM-Ice Pivot Iterative  median={:.1f}°'.format(cfit_iter_err.median()))
-            ax.axvline(cfit_iter_err.median(), color='darkorange', linewidth=2, linestyle='--')
-
         ax.set_xlabel('Angular error from MC truth (deg)', fontsize=12)
         ax.set_ylabel('Events', fontsize=12)
         ax.legend(fontsize=11)
         plt.tight_layout()
         plt.savefig(args.plot, dpi=150)
-        print("Saved histogram plot to {}".format(args.plot))
+        print("Saved plot to {}".format(args.plot))
 
 
 if __name__ == '__main__':
