@@ -45,13 +45,15 @@ import blo_python as blo
 parser = argparse.ArgumentParser()
 parser.add_argument("--n-per-bin", type=int, default=1000,
                     help="Events per energy bin (default 1000)")
+parser.add_argument("--n-bins", type=int, default=5,
+                    help="Number of log-spaced energy bins (default 5)")
 parser.add_argument("--output", type=str, default=None,
-                    help="Output npz path (default auto-named by n-per-bin)")
+                    help="Output npz path (default auto-named by n-per-bin and n-bins)")
 args = parser.parse_args()
 
 # ── Simulation parameters ─────────────────────────────────────────────────────
 
-N_BINS      = 5
+N_BINS      = args.n_bins
 N_PER_BIN   = args.n_per_bin
 E_MIN_GEV   = 1e2     # 100 GeV
 E_MAX_GEV   = 1e5     # 100 TeV
@@ -74,7 +76,7 @@ rng = np.random.default_rng(seed=42)
 # ── Output ────────────────────────────────────────────────────────────────────
 
 output_dir  = os.path.expanduser("~/dmice_work/output/")
-_default_out = os.path.join(output_dir, f"muons_binned_{N_BINS * N_PER_BIN}ev.npz")
+_default_out = os.path.join(output_dir, f"muons_binned_{N_BINS}bins_{N_PER_BIN}pbin.npz")
 output_file = args.output if args.output else _default_out
 os.makedirs(output_dir, exist_ok=True)
 
