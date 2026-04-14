@@ -47,6 +47,10 @@ parser.add_argument("--n-per-bin", type=int, default=1000,
                     help="Events per energy bin (default 1000)")
 parser.add_argument("--n-bins", type=int, default=5,
                     help="Number of log-spaced energy bins (default 5)")
+parser.add_argument("--e-min", type=float, default=1e2,
+                    help="Minimum energy in GeV (default 100)")
+parser.add_argument("--e-max", type=float, default=1e5,
+                    help="Maximum energy in GeV (default 100000)")
 parser.add_argument("--output", type=str, default=None,
                     help="Output npz path (default auto-named by n-per-bin and n-bins)")
 args = parser.parse_args()
@@ -55,8 +59,8 @@ args = parser.parse_args()
 
 N_BINS      = args.n_bins
 N_PER_BIN   = args.n_per_bin
-E_MIN_GEV   = 1e2     # 100 GeV
-E_MAX_GEV   = 1e5     # 100 TeV
+E_MIN_GEV   = args.e_min
+E_MAX_GEV   = args.e_max
 # Injection from ABOVE detector (downgoing muons enter from the top)
 INJECT_Z_KM = -1.3    # km — above IC86 top (~-1.45 km)
 PROP_KM     = 3.0     # km — propagates through full IC86 + DM-Ice depth
