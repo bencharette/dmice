@@ -154,9 +154,35 @@ One row per simulation run or analysis result. Status: ✅ validated | ⚠️ pa
 
 ## Real Data Analyses
 
-### REAL-01 — Real coincidence reconstruction
-- **Script**: `run_all_recos_real.py`
-- **Input**: Real IceCube data (2020–2021 coincidences)
-- **Output**: `~/dmice_work/output/real_all_recos.csv`
-- **Plots**: `real_recos_*.png`
-- **Status**: ✅ (used as cross-check for sim pipeline)
+### REAL-01 — Real coincidence reconstruction (2012–2019)
+- **Script**: `run_all_recos_real.py` (input: `all_dmice_coincidences_2011_2022_fixed.i3.zst`)
+- **Output**: `~/dmice_work/output/real_all_recos.csv` (superseded by REAL-02)
+- **Events**: 4611, 585 with DM-Ice pivot
+- **Status**: ✅ superseded
+
+---
+
+### REAL-02 — Real coincidence reconstruction (2012–2021)
+- **Script**: `run_all_recos_real.py` (input: `all_dmice_coincidences_2011_2022_fixed.i3.zst` via `.i3` symlink)
+- **Machine**: Cobalt
+- **Output**: `~/dmice_work/output/real_all_recos.csv`, `real_recos_2012_2021.png`
+- **Events**: 4851 total, **586 with DM-Ice pivot** (d⊥ < 15 m)
+- **Per year**: 2012: 1220, 2013: 1114, 2014: 813, 2015: 588, 2016: 286, 2017: 233, 2018: 166, 2019: 191, 2020: 140, 2021: 100
+- **Key results** (pivot events only, n=586):
+  | Fit | Median zenith shift vs LineFit |
+  |-----|-------------------------------|
+  | Pivot LineFit | **−11.5°** |
+  | MPEFit (std seed) | −1.1° |
+  | MPEFit (pivot seed) | −1.1° |
+- **Note**: `all_dmice_coincidences_2011_2022_fixed.i3.zst` starts with `[i3]` magic bytes — it is an uncompressed I3 file despite the `.zst` extension. Must be symlinked as `.i3` before IceTray can read it.
+- **Status**: ✅
+
+---
+
+### REAL-03 — 2020–2021 pipeline and master file update
+- **Scripts**: `merge_2020_2021.py --append`
+- **Machine**: Cobalt
+- **Input**: 3040 step3 coincidence files (1558 from 2020, 1482 from 2021)
+- **Output**: `dmice_coincidences_2020_2021.i3.zst` (1627 events), master updated to 98.5 MB
+- **Note**: Master file `all_dmice_coincidences_2011_2022.i3.zst` also has `[i3]` magic bytes after append — same symlink workaround needed to use in IceTray
+- **Status**: ✅
