@@ -250,26 +250,27 @@ def compute_pivot_lf(frame):
     if len(xs) < 4:
         return
 
-    # μ-corrected DM-Ice hit time: subtract NaI scintillation mean
-    dm_t_corrected = None
-    if DM_T_KEY in frame:
-        dm_t_corrected = frame[DM_T_KEY].value - MU_NS
-
-    piv = pivot_linefit_ic(xs, ys, zs, ts, ws, dm_pos, lf_dir, dm_t=dm_t_corrected)
+    # Use LineFit-extrapolated crossing time at DM-Ice (dm_t=None).
+    # Ablation tests showed that subtracting MU_NS (NaI scintillation mean) here
+    # makes Pivot LineFit worse in simulation because BLO/PPC generates Cherenkov
+    # photon arrival times for DM-Ice, not NaI scintillation times.
+    piv = pivot_linefit_ic(xs, ys, zs, ts, ws, dm_pos, lf_dir, dm_t=None)
     if piv is None:
         return
 
-    # Anchor MPEFit seed vertex at DM-Ice position with t0 from DM-Ice constraint.
-    # t0 = dm_t_corrected - (projection of dm_pos onto track from lf vertex) / c
+    # Anchor MPEFit seed vertex at DM-Ice position.
+    # Use raw DM-Ice hit time (no μ correction) to set seed t0.
+    # Step-2 ablation: this is neutral on Pivot LineFit, slightly improves MPEFit seed.
+    dm_t_raw = frame[DM_T_KEY].value if DM_T_KEY in frame else None
     lf_particle = frame["LineFit"]
     pp = dataclasses.I3Particle()
     pp.dir = dataclasses.I3Direction(piv[0], piv[1], piv[2])
-    if dm_t_corrected is not None:
+    if dm_t_raw is not None:
         s = ((dm_pos[0] - lf_particle.pos.x) * piv[0] +
              (dm_pos[1] - lf_particle.pos.y) * piv[1] +
              (dm_pos[2] - lf_particle.pos.z) * piv[2])
         pp.pos  = dataclasses.I3Position(dm_pos[0], dm_pos[1], dm_pos[2])
-        pp.time = dm_t_corrected - s / C_M_NS
+        pp.time = dm_t_raw - s / C_M_NS
     else:
         pp.pos  = lf_particle.pos
         pp.time = lf_particle.time
