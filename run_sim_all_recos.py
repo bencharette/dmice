@@ -104,12 +104,14 @@ def _wm(vals, ws):
     W = sum(ws)
     return sum(v * w for v, w in zip(vals, ws)) / W if W else 0.0
 
-def pivot_linefit_ic(xs, ys, zs, ts, ws, dm_pos_ic, seed_dir):
+def pivot_linefit_ic(xs, ys, zs, ts, ws, dm_pos_ic, seed_dir, dm_t=None):
     cx, cy, cz = _wm(xs, ws), _wm(ys, ws), _wm(zs, ws)
     tb = _wm(ts, ws)
     d_proj = ((dm_pos_ic[0]-cx)*seed_dir[0] + (dm_pos_ic[1]-cy)*seed_dir[1]
               + (dm_pos_ic[2]-cz)*seed_dir[2])
-    t_dm = tb + d_proj / C_M_NS
+    # Use actual μ-corrected DM-Ice hit time if available;
+    # fall back to LineFit extrapolation for events without a DM-Ice hit.
+    t_dm = dm_t if dm_t is not None else tb + d_proj / C_M_NS
     dts  = [t - t_dm for t in ts]
     drxs = [x - dm_pos_ic[0] for x in xs]
     drys = [y - dm_pos_ic[1] for y in ys]
@@ -248,16 +250,29 @@ def compute_pivot_lf(frame):
     if len(xs) < 4:
         return
 
-    piv = pivot_linefit_ic(xs, ys, zs, ts, ws, dm_pos, lf_dir)
+    # μ-corrected DM-Ice hit time: subtract NaI scintillation mean
+    dm_t_corrected = None
+    if DM_T_KEY in frame:
+        dm_t_corrected = frame[DM_T_KEY].value - MU_NS
+
+    piv = pivot_linefit_ic(xs, ys, zs, ts, ws, dm_pos, lf_dir, dm_t=dm_t_corrected)
     if piv is None:
         return
 
-    # Copy position/time from LineFit so MPEFit seed service has a valid vertex
+    # Anchor MPEFit seed vertex at DM-Ice position with t0 from DM-Ice constraint.
+    # t0 = dm_t_corrected - (projection of dm_pos onto track from lf vertex) / c
     lf_particle = frame["LineFit"]
     pp = dataclasses.I3Particle()
-    pp.dir        = dataclasses.I3Direction(piv[0], piv[1], piv[2])
-    pp.pos        = lf_particle.pos
-    pp.time       = lf_particle.time
+    pp.dir = dataclasses.I3Direction(piv[0], piv[1], piv[2])
+    if dm_t_corrected is not None:
+        s = ((dm_pos[0] - lf_particle.pos.x) * piv[0] +
+             (dm_pos[1] - lf_particle.pos.y) * piv[1] +
+             (dm_pos[2] - lf_particle.pos.z) * piv[2])
+        pp.pos  = dataclasses.I3Position(dm_pos[0], dm_pos[1], dm_pos[2])
+        pp.time = dm_t_corrected - s / C_M_NS
+    else:
+        pp.pos  = lf_particle.pos
+        pp.time = lf_particle.time
     pp.fit_status = dataclasses.I3Particle.FitStatus.OK
     frame[PIVOT_LF_KEY] = pp
 
