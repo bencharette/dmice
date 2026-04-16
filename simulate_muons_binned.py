@@ -53,6 +53,8 @@ parser.add_argument("--e-max", type=float, default=1e5,
                     help="Maximum energy in GeV (default 100000)")
 parser.add_argument("--output", type=str, default=None,
                     help="Output npz path (default auto-named by n-per-bin and n-bins)")
+parser.add_argument("--detector", type=str, default=None, choices=["det1", "det2"],
+                    help="Lock all events to one DM-Ice detector (default: alternate det1/det2)")
 args = parser.parse_args()
 
 # ── Simulation parameters ─────────────────────────────────────────────────────
@@ -80,7 +82,8 @@ rng = np.random.default_rng(seed=42)
 # ── Output ────────────────────────────────────────────────────────────────────
 
 output_dir  = os.path.expanduser("~/dmice_work/output/")
-_default_out = os.path.join(output_dir, f"muons_binned_{N_BINS}bins_{N_PER_BIN}pbin.npz")
+_det_suffix  = f"_{args.detector}" if args.detector else ""
+_default_out = os.path.join(output_dir, f"muons_binned_{N_BINS}bins_{N_PER_BIN}pbin{_det_suffix}.npz")
 output_file = args.output if args.output else _default_out
 os.makedirs(output_dir, exist_ok=True)
 
@@ -143,8 +146,11 @@ for bin_id in range(N_BINS):
         # zenith in BLO frame for storage
         zen_blo = np.arccos(dz)   # in [pi/2, pi] for downgoing
 
-        # aim track through DM-Ice detector (alternating det1/det2)
-        target    = "det1" if (bin_id * N_PER_BIN + ev) % 2 == 0 else "det2"
+        # aim track through DM-Ice detector
+        if args.detector:
+            target = args.detector
+        else:
+            target = "det1" if (bin_id * N_PER_BIN + ev) % 2 == 0 else "det2"
         target_id = 0 if target == "det1" else 1
         det_km = DMICE[target]
 
