@@ -281,6 +281,12 @@ class SpatialPivotModule(icetray.I3Module):
     Spatial-only DM-Ice pivot: re-anchors track vertex to dm_pos using IC timing only.
     Does NOT use DM-Ice hit time — only the POSITION of the crystal (d_perp≈0).
     Seeds MPEFit and SPEFit to isolate the contribution of spatial vs temporal info.
+
+    Applied to ALL events: every event in this dataset is a DM-Ice coincidence,
+    meaning the muon physically traversed the NaI crystal. NaI scintillation only
+    fires on direct ionisation, so d_perp ≡ 0 by event selection. The previous
+    guard on reconstructed d_perp was wrong — it dropped events where LineFit
+    was inaccurate, not events where the muon missed the crystal.
     """
     def __init__(self, ctx):
         super().__init__(ctx)
@@ -299,11 +305,13 @@ class SpatialPivotModule(icetray.I3Module):
         lf_dir = np.array([lf.dir.x, lf.dir.y, lf.dir.z])
         lf_pos = np.array([lf.pos.x, lf.pos.y, lf.pos.z])
 
-        # Check d_perp — only anchor spatially if track is close to DM-Ice
-        _, d_perp = t_geometric(lf_pos, lf_dir, lf.time, dm_pos)
-        if d_perp > D_MAX:
-            self.PushFrame(frame)
-            return
+        # NOTE: All events in this dataset are DM-Ice coincidences — the muon
+        # physically passed through the NaI crystal (d_perp ≈ 0 by selection).
+        # The scintillator only fires on direct ionisation, so a DM-Ice hit is
+        # definitive proof the muon crossed the crystal. We therefore apply the
+        # spatial anchor unconditionally; the old d_perp > D_MAX guard was
+        # incorrectly cutting events where the *reconstructed* (not true) track
+        # had large d_perp due to poor LineFit at low energies.
 
         # Re-reference vertex to dm_pos using IC-derived timing (no DM-Ice time used)
         r = np.array(dm_pos) - lf_pos
