@@ -39,7 +39,8 @@ def main():
 
     os.makedirs(args.out, exist_ok=True)
     df = pd.read_csv(args.csv)
-    print(f"Events: {len(df)}")
+    n_events = len(df)
+    print(f"Events: {n_events}")
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
@@ -56,7 +57,7 @@ def main():
 
     ax.set_xlabel("Angular error vs MC truth (°)")
     ax.set_ylabel("Normalised events / bin")
-    ax.set_title("Angular error distribution\n(BLO sim, 200 events)")
+    ax.set_title(f"Angular error distribution\n(BLO sim, {n_events} events)")
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3)
 
@@ -98,8 +99,9 @@ def main():
         if len(vals):
             print(f"  {label:20s}: {np.median(vals):.2f}°  (n={len(vals)})")
 
+    n_events = len(df)
     fig.suptitle(
-        "BLO 200-event downgoing muon sim — "
+        f"BLO {n_events}-event downgoing muon sim — "
         "LineFit vs MPEFit with/without DM-Ice pivot",
         fontsize=11
     )
