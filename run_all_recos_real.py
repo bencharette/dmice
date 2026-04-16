@@ -142,7 +142,10 @@ class SetupModule(icetray.I3Module):
 
     def Physics(self, frame):
         hdr = frame["I3EventHeader"]
-        uid = (hdr.run_id, hdr.event_id)
+        # Include sub_event_stream so NullSplit and InIceSplit are not
+        # collapsed together (2016+ data has multiple P-frames per DAQ event)
+        uid = (hdr.run_id, hdr.event_id,
+               getattr(hdr, 'sub_event_stream', ''))
 
         # ── Deduplicate ───────────────────────────────────────────────────
         if uid in seen:
