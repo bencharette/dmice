@@ -2,6 +2,8 @@
 
 Status: ✅ active/validated | ⚠️ partial/superseded | ❌ broken/tabled | 🗄️ archive
 
+Related: [[INDEX]] | [[RESULTS]] | [[COMMANDS]] | [[BLO_SIM_PIPELINE]]
+
 ---
 
 ## Core Library

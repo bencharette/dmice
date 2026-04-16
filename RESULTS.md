@@ -2,6 +2,8 @@
 
 One row per simulation run or analysis result. Status: ✅ validated | ⚠️ partial | ❌ broken/tabled.
 
+Related: [[INDEX]] | [[SCRIPTS]] | [[RECONSTRUCTION_PLAN]] | [[PAPER_IDEAS]]
+
 ---
 
 ## Simulation Runs

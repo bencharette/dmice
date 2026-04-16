@@ -1,5 +1,7 @@
 # DM-Ice Paper Ideas and Discussion
 
+Related: [[INDEX]] | [[RESULTS]] | [[RECONSTRUCTION_PLAN]] | [[READING_LIST]]
+
 ## Core Result
 
 Improved muon angular reconstruction using DM-Ice NaI scintillator timing as a
