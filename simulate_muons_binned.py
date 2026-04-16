@@ -53,7 +53,7 @@ parser.add_argument("--e-max", type=float, default=1e5,
                     help="Maximum energy in GeV (default 100000)")
 parser.add_argument("--output", type=str, default=None,
                     help="Output npz path (default auto-named by n-per-bin and n-bins)")
-parser.add_argument("--detector", type=str, default=None, choices=["det1", "det2"],
+parser.add_argument("--detector", type=str, default=None, choices=["det1", "det2", "det_center"],
                     help="Lock all events to one DM-Ice detector (default: alternate det1/det2)")
 args = parser.parse_args()
 
@@ -68,9 +68,11 @@ INJECT_Z_KM = -1.3    # km — above IC86 top (~-1.45 km)
 PROP_KM     = 3.0     # km — propagates through full IC86 + DM-Ice depth
 
 # DM-Ice detector positions in BLO coordinates [km]
+# det_center: IceCube geometric center (0,0,0) IC coords → BLO z = (0 - 1948.07)/1000
 DMICE = {
-    "det1": np.array([ 0.03125,  -0.07293, -2.45912]),
-    "det2": np.array([-0.33480,  -0.42450, -2.45933]),
+    "det1":       np.array([ 0.03125,  -0.07293, -2.45912]),
+    "det2":       np.array([-0.33480,  -0.42450, -2.45933]),
+    "det_center": np.array([ 0.0,       0.0,     -1.94807]),
 }
 
 # log10 bin edges

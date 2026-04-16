@@ -26,8 +26,9 @@ OUT_CSV  = os.path.expanduser("~/dmice_work/output/comparison/sim_all_recos.csv"
 
 # DM-Ice positions in IceCube coordinates [m] (z_BLO + 1948.07)
 DMICE_POS_IC = {
-    "det1": np.array([ 31.25,  -72.93, -511.05]),
-    "det2": np.array([-334.80, -424.50, -511.26]),
+    "det1":       np.array([ 31.25,  -72.93, -511.05]),
+    "det2":       np.array([-334.80, -424.50, -511.26]),
+    "det_center": np.array([  0.0,     0.0,     0.0  ]),  # IceCube geometric center
 }
 Z_OFFSET = 1948.07   # BLO z → IceCube z
 C_M_NS   = 0.2998
