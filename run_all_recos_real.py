@@ -46,7 +46,7 @@ IC_STRINGS = set(range(1, 87))
 SPICEMIE_DIR    = "/cvmfs/icecube.opensciencegrid.org/data/photon-tables/SPICEMie"
 SPICEMIE_DRIVER = os.path.join(SPICEMIE_DIR, "driverfiles")
 GCD_FILE  = "/cvmfs/icecube.opensciencegrid.org/data/GCD/GeoCalibDetectorStatus_2013.56429_V1.i3.gz"
-IN_FILE   = "/data/user/bcharett/dmice_coincidences_2011_2022/all_dmice_coincidences_2011_2022_fixed.i3.zst"
+IN_FILE   = "/data/user/bcharett/dmice_coincidences_2011_2022/all_dmice_coincidences_2011_2022_fixed.i3"
 OUT_DIR   = os.path.expanduser("~/dmice_work/output")
 OUT_CSV   = os.path.join(OUT_DIR, "real_all_recos.csv")
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -147,6 +147,11 @@ class SetupModule(icetray.I3Module):
         uid = (hdr.run_id, hdr.event_id,
                getattr(hdr, 'sub_event_stream', ''))
 
+        # ── Skip non-muon sub-event streams ──────────────────────────────
+        stream = getattr(hdr, 'sub_event_stream', '')
+        if stream not in ('', 'in_ice', 'InIceSplit'):
+            return   # NullSplit, IceTopSplit, SLOPSplit etc. — no muon reco
+
         # ── Deduplicate ───────────────────────────────────────────────────
         if uid in seen:
             return   # drop duplicate
@@ -193,11 +198,16 @@ class SetupModule(icetray.I3Module):
         det_key = "det1" if "det1" in det_raw else "det2"
         dm_pos  = DMICE_POS[det_key]
 
-        # ── Get LineFit for seed ───────────────────────────────────────────
-        if "LineFit" not in frame:
+        # ── Get LineFit for seed (fall back to PoleMuonLinefit for 2017+) ──
+        lf_key = None
+        for k in ("LineFit", "PoleMuonLinefit"):
+            if k in frame:
+                lf_key = k
+                break
+        if lf_key is None:
             self.PushFrame(frame)
             return
-        lf = frame["LineFit"]
+        lf = frame[lf_key]
         seed_dir = (lf.dir.x, lf.dir.y, lf.dir.z)
 
         # ── Check d_perp — only anchor pivot if within D_MAX ──────────────
