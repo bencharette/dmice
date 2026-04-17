@@ -36,10 +36,12 @@ out_dir = os.path.expanduser(args.out_dir)
 stem    = os.path.basename(npz).replace("_repacked.npz", "").replace(".npz", "")
 
 os.makedirs(out_dir, exist_ok=True)
-wrap_dir = os.path.join(DATA_BASE, stem, "wrappers")  # on /data
-log_dir  = os.path.join(SCRATCH,   stem, "logs")      # on /scratch (Condor requirement)
-os.makedirs(wrap_dir, exist_ok=True)
-os.makedirs(log_dir,  exist_ok=True)
+wrap_dir    = os.path.join(DATA_BASE, stem, "wrappers")  # wrappers on /data
+stdout_dir  = os.path.join(DATA_BASE, stem, "logs")      # stdout/stderr on /data
+condor_log  = os.path.join(SCRATCH,   stem)              # condor log on /scratch
+os.makedirs(wrap_dir,   exist_ok=True)
+os.makedirs(stdout_dir, exist_ok=True)
+os.makedirs(condor_log, exist_ok=True)
 
 wrappers = []
 for chunk_id in range(args.n_chunks):
@@ -67,9 +69,9 @@ with open(sub_path, "w") as f:
     f.write("request_memory = 4GB\n")
     f.write("request_disk   = 1GB\n")
     f.write("Executable     = $(WRAPPER)\n")
-    f.write(f"Output         = {log_dir}/$(STEM).out\n")
-    f.write(f"Error          = {log_dir}/$(STEM).err\n")
-    f.write(f"Log            = {log_dir}/condor.log\n\n")
+    f.write(f"Output         = {stdout_dir}/$(STEM).out\n")
+    f.write(f"Error          = {stdout_dir}/$(STEM).err\n")
+    f.write(f"Log            = {condor_log}/condor.log\n\n")
     f.write("Queue STEM, WRAPPER from (\n")
     for stem_name, wrapper in wrappers:
         f.write(f"  {stem_name}, {wrapper}\n")
