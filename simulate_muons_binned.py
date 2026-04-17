@@ -153,7 +153,7 @@ for bin_id in range(N_BINS):
             target = args.detector
         else:
             target = "det1" if (bin_id * N_PER_BIN + ev) % 2 == 0 else "det2"
-        target_id = 0 if target == "det1" else 1
+        target_id = 0 if target == "det1" else (2 if target == "det_center" else 1)
         det_km = DMICE[target]
 
         # back-project from det position to injection height

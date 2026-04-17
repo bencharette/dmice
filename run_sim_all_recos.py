@@ -20,9 +20,12 @@ from scipy.optimize import minimize as scipy_minimize
 from scipy.special import gammaln
 
 _default_npz = "~/dmice_work/output/muons_binned_200ev_repacked.npz"
-NPZ_FILE = os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else _default_npz)
-GEO_FILE = os.path.expanduser("~/dmice/BlueLightOrchestra.jl/resources/geofiles/icecube_with_dmice.geo")
-OUT_CSV  = os.path.expanduser("~/dmice_work/output/comparison/sim_all_recos.csv")
+NPZ_FILE     = os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else _default_npz)
+GEO_FILE     = os.path.expanduser("~/dmice/BlueLightOrchestra.jl/resources/geofiles/icecube_with_dmice.geo")
+_default_csv = "~/dmice_work/output/comparison/sim_all_recos.csv"
+OUT_CSV      = os.path.expanduser(sys.argv[2] if len(sys.argv) > 2 else _default_csv)
+# Optional: override detector for all events (e.g. det_center whose target_id=1 by legacy bug)
+DET_OVERRIDE = sys.argv[3] if len(sys.argv) > 3 else None  # e.g. "det_center"
 
 # DM-Ice positions in IceCube coordinates [m] (z_BLO + 1948.07)
 DMICE_POS_IC = {
@@ -231,7 +234,14 @@ def compute_pivot_lf(frame):
     lf_dir = (lf.dir.x, lf.dir.y, lf.dir.z)
 
     tgt_id = frame["TargetDet"].value if "TargetDet" in frame else 0
-    dm_pos = DMICE_POS_IC["det1"] if tgt_id == 0 else DMICE_POS_IC["det2"]
+    if DET_OVERRIDE:
+        dm_pos = DMICE_POS_IC[DET_OVERRIDE]
+    elif tgt_id == 0:
+        dm_pos = DMICE_POS_IC["det1"]
+    elif tgt_id == 2:
+        dm_pos = DMICE_POS_IC["det_center"]
+    else:
+        dm_pos = DMICE_POS_IC["det2"]
 
     try:
         pulses = dataclasses.I3RecoPulseSeriesMap.from_frame(frame, "InIcePulses")
@@ -377,8 +387,16 @@ class DMCombinedFitModule(icetray.I3Module):
             self.PushFrame(frame)
             return
 
-        dm_id          = frame["TargetDet"].value
-        dm_pos         = tuple(DMICE_POS_IC["det1" if dm_id == 0 else "det2"])
+        dm_id  = frame["TargetDet"].value
+        if DET_OVERRIDE:
+            dm_key = DET_OVERRIDE
+        elif dm_id == 0:
+            dm_key = "det1"
+        elif dm_id == 2:
+            dm_key = "det_center"
+        else:
+            dm_key = "det2"
+        dm_pos = tuple(DMICE_POS_IC[dm_key])
         dm_t_corrected = frame[DM_T_KEY].value - MU_NS
 
         pulses = []
