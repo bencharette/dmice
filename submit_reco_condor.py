@@ -46,7 +46,7 @@ os.makedirs(condor_log, exist_ok=True)
 wrappers = []
 for chunk_id in range(args.n_chunks):
     csv_out  = os.path.join(out_dir, f"chunk_{chunk_id:03d}.csv")
-    det_arg  = args.det if args.det else ""
+    det_arg  = args.det if args.det else "none"
     wrap_path = os.path.join(wrap_dir, f"chunk_{chunk_id:03d}.sh")
 
     script = f"""#!/bin/bash
