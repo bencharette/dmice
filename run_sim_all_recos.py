@@ -53,7 +53,13 @@ os.makedirs(os.path.dirname(OUT_CSV), exist_ok=True)
 from icecube import icetray, dataclasses, dataio, simclasses
 from icecube import linefit, lilliput, gulliver, gulliver_modules
 import icecube.lilliput.segments
+from icecube.spline_reco import SplineMPE
 from icecube.icetray import I3Units, I3Tray
+
+SPLINE_TIMING_BARE  = "/cvmfs/icecube.opensciencegrid.org/data/photon-tables/splines/InfBareMu_mie_prob_z20a10_V2.fits"
+SPLINE_AMP_BARE     = "/cvmfs/icecube.opensciencegrid.org/data/photon-tables/splines/InfBareMu_mie_abs_z20a10_V2.fits"
+SPLINE_TIMING_STOCH = "/cvmfs/icecube.opensciencegrid.org/data/photon-tables/splines/InfHighEStoch_mie_prob_z20a10.fits"
+SPLINE_AMP_STOCH    = "/cvmfs/icecube.opensciencegrid.org/data/photon-tables/splines/InfHighEStoch_mie_abs_z20a10.fits"
 
 # ── Geometry ─────────────────────────────────────────────────────────────────
 
@@ -244,9 +250,12 @@ PIVOT_SPE_KEY    = "PivotSPEFit"
 PIVOT_MPE_KEY    = "PivotMPEFit"
 COMBINED_SPE_KEY = "CombinedSPEFit"   # IC Pandel + DM-Ice Gaussian, pivot seed
 COMBINED_MPE_KEY = "CombinedMPEFit"   # IC Pandel + DM-Ice Gaussian, pivot seed
-ITER_MPE_KEY     = "IterMPE"          # Iterative Pandel MPE (3 iterations)
-ITER_PIVOT_LF_KEY= "IterPivotLineFit" # Pivot LineFit seeded from IterMPE direction
-ITER_PIVOT_MPE_KEY="IterPivotMPEFit"  # MPEFit seeded from IterPivotLineFit
+ITER_MPE_KEY      = "IterMPE"           # Iterative Pandel SPE (3 iterations)
+ITER_PIVOT_LF_KEY = "IterPivotLineFit"  # Pivot LineFit seeded from IterMPE direction
+ITER_PIVOT_MPE_KEY= "IterPivotMPEFit"   # MPEFit seeded from IterPivotLineFit
+SPLINE_STD_KEY    = "SplineMPE_std"     # SplineMPE seeded from LineFit
+SPLINE_PIV_KEY    = "SplineMPE_piv"     # SplineMPE seeded from PivotLineFit
+SPLINE_ITER_KEY   = "SplineMPE_iter"    # SplineMPE seeded from IterPivotLineFit
 DM_T_KEY         = "DMIce_t"          # DM-Ice corrected hit time in frame
 
 def compute_pivot_lf(frame):
@@ -385,9 +394,12 @@ def extract(frame):
         pivot_mpe_ang_err_deg    = ang(PIVOT_MPE_KEY),
         combined_spe_ang_err_deg  = ang(COMBINED_SPE_KEY),
         combined_mpe_ang_err_deg  = ang(COMBINED_MPE_KEY),
-        iter_mpe_ang_err_deg      = ang(ITER_MPE_KEY),
-        iter_pivot_lf_ang_err_deg = ang(ITER_PIVOT_LF_KEY),
-        iter_pivot_mpe_ang_err_deg= ang(ITER_PIVOT_MPE_KEY),
+        iter_mpe_ang_err_deg       = ang(ITER_MPE_KEY),
+        iter_pivot_lf_ang_err_deg  = ang(ITER_PIVOT_LF_KEY),
+        iter_pivot_mpe_ang_err_deg = ang(ITER_PIVOT_MPE_KEY),
+        spline_std_ang_err_deg     = ang(SPLINE_STD_KEY),
+        spline_piv_ang_err_deg     = ang(SPLINE_PIV_KEY),
+        spline_iter_ang_err_deg    = ang(SPLINE_ITER_KEY),
     ))
 
 # ── Combined IC Pandel + DM-Ice Gaussian likelihood ──────────────────────────
@@ -566,7 +578,7 @@ tray.Add(icecube.lilliput.segments.I3IterativePandelFitter,
     domllh       = "SPE1st",
     pulses       = "InIcePulses",
     seeds        = ["LineFit"],
-    n_iterations = 2,
+    n_iterations = 3,
     If           = lambda f: "LineFit" in f,
 )
 
@@ -581,6 +593,31 @@ tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
     seeds   = [ITER_PIVOT_LF_KEY],
     If      = lambda f: ITER_PIVOT_LF_KEY in f,
 )
+
+# SplineMPE — three seeds: standard LineFit, PivotLineFit, IterPivotLineFit
+SPLINE_COMMON = dict(
+    configuration        = "recommended",
+    PulsesName           = "InIcePulses",
+    BareMuTimingSpline   = SPLINE_TIMING_BARE,
+    BareMuAmplitudeSpline= SPLINE_AMP_BARE,
+    StochTimingSpline    = SPLINE_TIMING_STOCH,
+    StochAmplitudeSpline = SPLINE_AMP_STOCH,
+)
+
+tray.Add(SplineMPE, fitname=SPLINE_STD_KEY,
+    TrackSeedList=["LineFit"],
+    If=lambda f: "LineFit" in f,
+    **SPLINE_COMMON)
+
+tray.Add(SplineMPE, fitname=SPLINE_PIV_KEY,
+    TrackSeedList=[PIVOT_LF_KEY],
+    If=lambda f: PIVOT_LF_KEY in f,
+    **SPLINE_COMMON)
+
+tray.Add(SplineMPE, fitname=SPLINE_ITER_KEY,
+    TrackSeedList=[ITER_PIVOT_LF_KEY],
+    If=lambda f: ITER_PIVOT_LF_KEY in f,
+    **SPLINE_COMMON)
 
 tray.Add(extract, Streams=[icetray.I3Frame.Physics])
 
@@ -613,6 +650,9 @@ for key, label in [
     ("iter_mpe_ang_err_deg",      "IterMPE"),
     ("iter_pivot_lf_ang_err_deg", "IterPivot LineFit"),
     ("iter_pivot_mpe_ang_err_deg","IterPivot MPEFit"),
+    ("spline_std_ang_err_deg",    "SplineMPE (LineFit seed)"),
+    ("spline_piv_ang_err_deg",    "SplineMPE (Pivot seed)"),
+    ("spline_iter_ang_err_deg",   "SplineMPE (IterPivot seed)"),
 ]:
     print(f"  {label:<22}  {valid(key):>5}  {median_ang(key):>13.2f}°")
 print(f"Saved: {OUT_CSV}")
