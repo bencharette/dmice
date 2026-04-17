@@ -539,13 +539,14 @@ tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
 
 tray.Add(DMCombinedFitModule)
 
-# IterativePandelFit: 3 iterations, removes timing outliers between passes
+# IterativePandelFit: 2 iterations, SPE1st (more stable than MPE for iterative)
+# then use result as seed for a final MPEFit pass
 tray.Add(icecube.lilliput.segments.I3IterativePandelFitter,
     fitname      = ITER_MPE_KEY,
-    domllh       = "MPE",
+    domllh       = "SPE1st",
     pulses       = "InIcePulses",
     seeds        = ["LineFit"],
-    n_iterations = 3,
+    n_iterations = 2,
     If           = lambda f: "LineFit" in f,
 )
 
