@@ -224,6 +224,9 @@ PIVOT_SPE_KEY    = "PivotSPEFit"
 PIVOT_MPE_KEY    = "PivotMPEFit"
 COMBINED_SPE_KEY = "CombinedSPEFit"   # IC Pandel + DM-Ice Gaussian, pivot seed
 COMBINED_MPE_KEY = "CombinedMPEFit"   # IC Pandel + DM-Ice Gaussian, pivot seed
+ITER_MPE_KEY     = "IterMPE"          # Iterative Pandel MPE (3 iterations)
+ITER_PIVOT_LF_KEY= "IterPivotLineFit" # Pivot LineFit seeded from IterMPE direction
+ITER_PIVOT_MPE_KEY="IterPivotMPEFit"  # MPEFit seeded from IterPivotLineFit
 DM_T_KEY         = "DMIce_t"          # DM-Ice corrected hit time in frame
 
 def compute_pivot_lf(frame):
@@ -288,6 +291,46 @@ def compute_pivot_lf(frame):
     pp.fit_status = dataclasses.I3Particle.FitStatus.OK
     frame[PIVOT_LF_KEY] = pp
 
+# ── IterMPE-seeded pivot ──────────────────────────────────────────────────────
+
+def compute_iter_pivot_lf(frame):
+    """Pivot LineFit anchored using IterMPE direction instead of LineFit."""
+    if ITER_MPE_KEY not in frame or DM_T_KEY not in frame:
+        return
+    iter_p = frame[ITER_MPE_KEY]
+    if iter_p.fit_status != dataclasses.I3Particle.FitStatus.OK:
+        return
+
+    dm_id  = frame["TargetDet"].value
+    if DET_OVERRIDE:
+        dm_key = DET_OVERRIDE
+    elif dm_id == 0:
+        dm_key = "det1"
+    elif dm_id == 2:
+        dm_key = "det_center"
+    else:
+        dm_key = "det2"
+    dm_pos = DMICE_POS_IC[dm_key]
+
+    dm_t_raw = frame[DM_T_KEY].value
+    piv = (iter_p.dir.x, iter_p.dir.y, iter_p.dir.z)
+
+    pp = dataclasses.I3Particle()
+    pp.dir = dataclasses.I3Direction(*piv)
+
+    if DM_T_KEY in frame:
+        s = ((dm_pos[0] - iter_p.pos.x) * piv[0] +
+             (dm_pos[1] - iter_p.pos.y) * piv[1] +
+             (dm_pos[2] - iter_p.pos.z) * piv[2])
+        pp.pos  = dataclasses.I3Position(dm_pos[0], dm_pos[1], dm_pos[2])
+        pp.time = dm_t_raw - s / C_M_NS
+    else:
+        pp.pos  = iter_p.pos
+        pp.time = iter_p.time
+    pp.fit_status = dataclasses.I3Particle.FitStatus.OK
+    frame[ITER_PIVOT_LF_KEY] = pp
+
+
 # ── Extraction ────────────────────────────────────────────────────────────────
 
 rows = []
@@ -320,8 +363,11 @@ def extract(frame):
         pivot_spe_ang_err_deg    = ang(PIVOT_SPE_KEY),
         mpe_ang_err_deg          = ang("MPEFit"),
         pivot_mpe_ang_err_deg    = ang(PIVOT_MPE_KEY),
-        combined_spe_ang_err_deg = ang(COMBINED_SPE_KEY),
-        combined_mpe_ang_err_deg = ang(COMBINED_MPE_KEY),
+        combined_spe_ang_err_deg  = ang(COMBINED_SPE_KEY),
+        combined_mpe_ang_err_deg  = ang(COMBINED_MPE_KEY),
+        iter_mpe_ang_err_deg      = ang(ITER_MPE_KEY),
+        iter_pivot_lf_ang_err_deg = ang(ITER_PIVOT_LF_KEY),
+        iter_pivot_mpe_ang_err_deg= ang(ITER_PIVOT_MPE_KEY),
     ))
 
 # ── Combined IC Pandel + DM-Ice Gaussian likelihood ──────────────────────────
@@ -493,6 +539,28 @@ tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
 
 tray.Add(DMCombinedFitModule)
 
+# IterativePandelFit: 3 iterations, removes timing outliers between passes
+tray.Add(icecube.lilliput.segments.I3IterativePandelFitter,
+    fitname      = ITER_MPE_KEY,
+    domllh       = "MPE",
+    pulses       = "InIcePulses",
+    seeds        = ["LineFit"],
+    n_iterations = 3,
+    If           = lambda f: "LineFit" in f,
+)
+
+# Pivot LineFit seeded from IterMPE direction
+tray.Add(compute_iter_pivot_lf, Streams=[icetray.I3Frame.Physics])
+
+# MPEFit seeded from IterPivotLineFit
+tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
+    fitname = ITER_PIVOT_MPE_KEY,
+    domllh  = "MPE",
+    pulses  = "InIcePulses",
+    seeds   = [ITER_PIVOT_LF_KEY],
+    If      = lambda f: ITER_PIVOT_LF_KEY in f,
+)
+
 tray.Add(extract, Streams=[icetray.I3Frame.Physics])
 
 tray.Execute()
@@ -519,8 +587,11 @@ for key, label in [
     ("pivot_spe_ang_err_deg",    "Pivot SPEFit"),
     ("mpe_ang_err_deg",          "MPEFit"),
     ("pivot_mpe_ang_err_deg",    "Pivot MPEFit"),
-    ("combined_spe_ang_err_deg", "Combined SPEFit"),
-    ("combined_mpe_ang_err_deg", "Combined MPEFit"),
+    ("combined_spe_ang_err_deg",  "Combined SPEFit"),
+    ("combined_mpe_ang_err_deg",  "Combined MPEFit"),
+    ("iter_mpe_ang_err_deg",      "IterMPE"),
+    ("iter_pivot_lf_ang_err_deg", "IterPivot LineFit"),
+    ("iter_pivot_mpe_ang_err_deg","IterPivot MPEFit"),
 ]:
     print(f"  {label:<22}  {valid(key):>5}  {median_ang(key):>13.2f}°")
 print(f"Saved: {OUT_CSV}")
