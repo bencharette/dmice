@@ -26,6 +26,9 @@ _default_csv = "~/dmice_work/output/comparison/sim_all_recos.csv"
 OUT_CSV      = os.path.expanduser(sys.argv[2] if len(sys.argv) > 2 else _default_csv)
 # Optional: override detector for all events (e.g. det_center whose target_id=1 by legacy bug)
 DET_OVERRIDE = sys.argv[3] if len(sys.argv) > 3 else None  # e.g. "det_center"
+# Optional: chunk slicing for Condor parallelism  argv[4]=chunk_id  argv[5]=n_chunks
+CHUNK_ID     = int(sys.argv[4]) if len(sys.argv) > 4 else None
+N_CHUNKS     = int(sys.argv[5]) if len(sys.argv) > 5 else None
 
 # DM-Ice positions in IceCube coordinates [m] (z_BLO + 1948.07)
 DMICE_POS_IC = {
@@ -84,15 +87,22 @@ for (s, dom), (px, py, pz) in geo_doms.items():
 # ── Load npz ─────────────────────────────────────────────────────────────────
 
 d = np.load(NPZ_FILE, allow_pickle=True)
-N = len(d["energy_GeV"])
-print(f"Loaded {N} events from {NPZ_FILE}")
+N_TOTAL = len(d["energy_GeV"])
+if CHUNK_ID is not None and N_CHUNKS is not None:
+    chunk_size = math.ceil(N_TOTAL / N_CHUNKS)
+    EV_START   = CHUNK_ID * chunk_size
+    EV_END     = min(EV_START + chunk_size, N_TOTAL)
+else:
+    EV_START, EV_END = 0, N_TOTAL
+N = EV_END - EV_START
+print(f"Loaded {N_TOTAL} events from {NPZ_FILE}  (processing {EV_START}:{EV_END})")
 
 def load_ragged(key):
     if f"{key}_flat" in d:
         flat    = d[f"{key}_flat"]
         offsets = d[f"{key}_offsets"]
-        return [flat[offsets[i]:offsets[i+1]] for i in range(N)]
-    return d[key]
+        return [flat[offsets[i]:offsets[i+1]] for i in range(EV_START, EV_END)]
+    return d[key][EV_START:EV_END]
 
 _dom_x      = load_ragged("dom_x")
 _dom_y      = load_ragged("dom_y")
@@ -101,6 +111,16 @@ _dom_t      = load_ragged("dom_t")
 _dom_nhits  = load_ragged("dom_nhits")
 _dom_string = load_ragged("dom_string")
 _dom_sensor = load_ragged("dom_sensor")
+
+# Scalar arrays — sliced to chunk range, indexed with local i
+_zenith      = d["zenith_rad"][EV_START:EV_END]
+_azimuth     = d["azimuth_rad"][EV_START:EV_END]
+_energy      = d["energy_GeV"][EV_START:EV_END]
+_bin_id      = d["bin_id"][EV_START:EV_END]
+_target_det  = d["target_det"][EV_START:EV_END]
+_n_hits      = d["n_hits"][EV_START:EV_END]
+_n_doms      = d["n_doms"][EV_START:EV_END]
+_dm_t        = d["dm_t_injected_ns"][EV_START:EV_END] if "dm_t_injected_ns" in d else None
 
 # ── Pivot LineFit (Python) ────────────────────────────────────────────────────
 
@@ -153,19 +173,19 @@ class NPZInjector(icetray.I3Module):
             self.RequestSuspension()
             return
 
-        i = self.idx
+        i = self.idx          # local index into sliced arrays
         self.idx += 1
 
         frame = icetray.I3Frame(icetray.I3Frame.Physics)
 
         hdr = dataclasses.I3EventHeader()
         hdr.run_id   = 3000
-        hdr.event_id = i
+        hdr.event_id = EV_START + i   # global event id for merge dedup
         frame["I3EventHeader"] = hdr
 
         # MC truth direction (BLO frame: zenith=arccos(dz), dz<0=downgoing)
-        zen = float(d["zenith_rad"][i])
-        azi = float(d["azimuth_rad"][i])
+        zen = float(_zenith[i])
+        azi = float(_azimuth[i])
         dx_mc = math.sin(zen) * math.cos(azi)
         dy_mc = math.sin(zen) * math.sin(azi)
         dz_mc = math.cos(zen)   # < 0 for downgoing
@@ -173,7 +193,7 @@ class NPZInjector(icetray.I3Module):
         primary = dataclasses.I3Particle()
         primary.type          = dataclasses.I3Particle.MuMinus
         primary.shape         = dataclasses.I3Particle.InfiniteTrack
-        primary.energy        = float(d["energy_GeV"][i]) * I3Units.GeV
+        primary.energy        = float(_energy[i]) * I3Units.GeV
         primary.dir           = dataclasses.I3Direction(dx_mc, dy_mc, dz_mc)
         primary.fit_status    = dataclasses.I3Particle.FitStatus.OK
         mc_tree = dataclasses.I3MCTree()
@@ -203,14 +223,14 @@ class NPZInjector(icetray.I3Module):
         frame["InIcePulses"] = pulse_map
 
         # Store metadata for extraction
-        frame["BinId"]     = icetray.I3Int(int(d["bin_id"][i]))
-        frame["TargetDet"] = icetray.I3Int(int(d["target_det"][i]))
-        frame["NHits"]     = icetray.I3Int(int(d["n_hits"][i]))
-        frame["NDoms"]     = icetray.I3Int(int(d["n_doms"][i]))
+        frame["BinId"]     = icetray.I3Int(int(_bin_id[i]))
+        frame["TargetDet"] = icetray.I3Int(int(_target_det[i]))
+        frame["NHits"]     = icetray.I3Int(int(_n_hits[i]))
+        frame["NDoms"]     = icetray.I3Int(int(_n_doms[i]))
 
         # DM-Ice hit time (analytically injected, NaI scintillation model)
-        if "dm_t_injected_ns" in d:
-            dm_t = float(d["dm_t_injected_ns"][i])
+        if _dm_t is not None:
+            dm_t = float(_dm_t[i])
             if math.isfinite(dm_t):
                 frame[DM_T_KEY] = dataclasses.I3Double(dm_t)
 
