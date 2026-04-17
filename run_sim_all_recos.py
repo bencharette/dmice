@@ -51,7 +51,7 @@ _JITTER_NS = 15.0    # DOM timing jitter [ns]
 os.makedirs(os.path.dirname(OUT_CSV), exist_ok=True)
 
 from icecube import icetray, dataclasses, dataio, simclasses
-from icecube import linefit, lilliput, gulliver, gulliver_modules, muex
+from icecube import linefit, lilliput, gulliver, gulliver_modules
 import icecube.lilliput.segments
 from icecube.spline_reco import SplineMPE
 from icecube.icetray import I3Units, I3Tray
@@ -594,21 +594,11 @@ tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
     If      = lambda f: ITER_PIVOT_LF_KEY in f,
 )
 
-# MuEX energy estimate (required for SplineMPE recommended config)
-tray.AddModule("I3MuEXAnalysis",
-    Name   = MUEX_KEY,
-    Pulses = "InIcePulses",
-    Seed   = "LineFit",
-    If     = lambda f: "LineFit" in f,
-)
-
 # SplineMPE — three seeds: standard LineFit, PivotLineFit, IterPivotLineFit
-MUEX_KEY = "MuEXEstimate"
-
 SPLINE_COMMON = dict(
     configuration        = "recommended",
     PulsesName           = "InIcePulses",
-    EnergyEstimators     = [MUEX_KEY],
+    EnergyEstimators     = ["MCTruth"],  # MC truth energy (sim only)
     BareMuTimingSpline   = SPLINE_TIMING_BARE,
     BareMuAmplitudeSpline= SPLINE_AMP_BARE,
     StochTimingSpline    = SPLINE_TIMING_STOCH,
