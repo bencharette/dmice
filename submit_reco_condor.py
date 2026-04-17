@@ -20,7 +20,8 @@ CVMFS     = "/cvmfs/icecube.opensciencegrid.org/py3-v4.3.0"
 ITRAY_VER = "v1.12.1"
 RECO      = os.path.expanduser("~/dmice/run_sim_all_recos.py")
 USER      = os.environ.get("USER", "bcharett")
-SCRATCH   = f"/data/user/{USER}/dmice_condor/reco"
+SCRATCH   = f"/scratch/{USER}/dmice_condor/reco"   # Condor logs — must be /scratch
+DATA_BASE = f"/data/user/{USER}/dmice_condor/reco"  # wrappers + output
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--npz",      required=True)
@@ -35,8 +36,8 @@ out_dir = os.path.expanduser(args.out_dir)
 stem    = os.path.basename(npz).replace("_repacked.npz", "").replace(".npz", "")
 
 os.makedirs(out_dir, exist_ok=True)
-wrap_dir = os.path.join(SCRATCH, stem, "wrappers")
-log_dir  = os.path.join(SCRATCH, stem, "logs")
+wrap_dir = os.path.join(DATA_BASE, stem, "wrappers")  # on /data
+log_dir  = os.path.join(SCRATCH,   stem, "logs")      # on /scratch (Condor requirement)
 os.makedirs(wrap_dir, exist_ok=True)
 os.makedirs(log_dir,  exist_ok=True)
 
@@ -58,7 +59,7 @@ exec {CVMFS}/${{ARCH}}/metaprojects/icetray/{ITRAY_VER}/env-shell.sh \\
     wrappers.append((f"chunk_{chunk_id:03d}", wrap_path))
 
 # Write submit file
-sub_path = os.path.join(SCRATCH, stem, "submit.sub")
+sub_path = os.path.join(DATA_BASE, stem, "submit.sub")
 with open(sub_path, "w") as f:
     f.write("Universe       = vanilla\n")
     f.write("GetEnv         = False\n")
