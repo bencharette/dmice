@@ -166,3 +166,48 @@ For someone new to the project:
 4. 1311.4767 → understand SplineMPE and why it beats Pandel
 5. Bertone et al. + DAMA/LIBRA paper → understand the physics motivation
 6. Cowan Ch. 7 → understand the statistics of the fits
+
+
+
+
+
+    "Results from the DM-Ice17 dark matter
+    experiment", Phys. Rev. D — this is your
+    experiment's own paper. Describes the NaI
+     detector response and timing.
+
+    ---
+    Machine learning for IceCube
+    reconstruction (the fallback)
+
+    - Abbasi et al. (2021), "A convolutional
+    neural network based cascade
+    reconstruction for the IceCube Neutrino
+    Observatory", JINST — IceCube's own ML
+    reco paper. Shows what features matter
+    and how performance compares to
+    likelihood methods.
+    - IceCube's DNN_reco and retro GitHub
+    repos — practical examples of feature
+    engineering for track reconstruction.
+
+    ---
+    Gulliver framework (IceTray-specific)
+
+    - The IceCube internal wiki page on
+    Gulliver is the best reference, but
+    requires IceCube credentials. The next
+    best thing is reading the source of
+    run_splinempe_pivot.py in your own
+    project alongside the lilliput and
+    gulliver_modules IceTray documentation —
+    the existing code is itself a working
+    tutorial.
+
+    ---
+    Suggested order if time is short: Ahrens
+    2004 → Cowan chapters 6 & 9 → Knoll
+    chapter 10 → Bradascio 2019 → Bergstra &
+    Bengio 2012.
+
+

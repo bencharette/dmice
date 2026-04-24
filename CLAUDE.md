@@ -19,6 +19,24 @@ You are the LOCAL machine assistant. At the start of every session:
 | NPX       | Condor job submission        | `ssh npx`         |
 | COBALT    | Interactive compute          | `ssh cobalt-14`   |
 
+## Directory Structure
+
+```
+sim/         Simulation: simulate_muons*.py, prometheus_to_i3.py, Condor .sub files
+reco/        Reconstruction: blo_python.py, run_*.py, step*.py, dmice_*.py
+analysis/    Analysis: compare_*.py, merge_*.py, count_coinc_per_year.py, ml_*.py
+plots/       Figures: plot_*.py, replot_benchmark.py
+pipeline/    Orchestration: *.sh scripts that run multi-step workflows
+tools/       Utilities: steamshovel_artists.py, start-work.sh, sync-memory.sh
+docs/        Documentation: RESULTS.md, RECONSTRUCTION_PLAN.md, plans, etc.
+BLO/         Blue Light Orchestra Julia code and resources
+condor_sim/  Condor simulation infrastructure
+handoff/     Cross-machine inbox/outbox messaging system
+memory/      Per-machine notes (local.md, npx.md, cobalt.md)
+output/      Local output files
+papers/      Reference papers
+```
+
 ## Key Files
 
 ```
@@ -30,6 +48,8 @@ handoff/inbox-npx.md         # Messages to send to NPX
 handoff/inbox-cobalt.md      # Messages to send to Cobalt
 handoff/done.md              # Archived completed items
 COMMANDS.md                  # Full command and workflow reference
+docs/RESULTS.md              # Current results
+docs/RECONSTRUCTION_PLAN.md  # Active reconstruction strategy
 ```
 
 ## Handoff Protocol

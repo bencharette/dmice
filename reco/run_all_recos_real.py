@@ -54,15 +54,21 @@ os.makedirs(OUT_DIR, exist_ok=True)
 # ── Pulse key priority ────────────────────────────────────────────────────────
 PULSE_PRIORITY = ["OfflinePulses", "SRTInIcePulses", "ReextractedInIcePulses", "InIcePulses"]
 IC_PULSES      = "RealICPulses"
-PIV_LF_KEY     = "RealPivotLF"       # pivot seeded from LineFit direction
-PIV_MPE_KEY    = "RealPivotMPE_LF"  # pivot seeded from MPEFit(std) direction
+CAPPED_PULSES  = "RealICPulsesCapped"   # charge-capped for IterMPE (MPE overflow fix)
+BEST_LF_KEY    = "BestLineFit"          # canonical LF (LineFit or PoleMuonLinefit)
+PIV_LF_KEY     = "RealPivotLF"          # pivot seeded from LineFit direction
+PIV_MPE_KEY    = "RealPivotMPE_LF"      # pivot seeded from MPEFit(std) direction
 MPE_STD_KEY    = "RealMPE_Std"
-MPE_PIV_KEY    = "RealMPE_Piv"      # MPEFit seeded from LineFit-pivot
-MPE_PIV2_KEY   = "RealMPE_Piv2"     # MPEFit seeded from MPEFit-pivot
+MPE_PIV_KEY    = "RealMPE_Piv"          # MPEFit seeded from LineFit-pivot
+MPE_PIV2_KEY   = "RealMPE_Piv2"         # MPEFit seeded from MPEFit-pivot
 SPE_STD_KEY    = "RealSPE_Std"
 SPE_PIV_KEY    = "RealSPE_Piv"
+ITER_MPE_KEY   = "RealIterMPE"          # 3-iter MPE on charge-capped pulses
+ITER_PIV_LF_KEY= "RealIterPivotLF"      # pivot from IterMPE direction
+ITER_PIV_MPE_KEY="RealIterPivotMPE"     # MPEFit seeded from IterPivotLF
 TRUNC_E_KEY    = "RealTruncatedEnergy"
 PHOT_SERVICE   = "PhotonicsServiceMu"
+MAX_CHARGE     = 5.0                     # charge cap per DOM for MPE stability
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
 def t_geometric(track_pos, track_dir, t0, dm_pos):
@@ -208,7 +214,21 @@ class SetupModule(icetray.I3Module):
             self.PushFrame(frame)
             return
         lf = frame[lf_key]
+        # Store under canonical key so downstream tray modules always find it
+        frame[BEST_LF_KEY] = lf
         seed_dir = (lf.dir.x, lf.dir.y, lf.dir.z)
+
+        # ── Charge-capped pulses (for IterMPE MPE stability) ──────────────
+        capped = dataclasses.I3RecoPulseSeriesMap()
+        for omk, plist in ic_map:
+            new_ps = dataclasses.I3RecoPulseSeries()
+            for p in plist:
+                new_p = dataclasses.I3RecoPulse()
+                new_p.time   = p.time
+                new_p.charge = min(p.charge, MAX_CHARGE)
+                new_ps.append(new_p)
+            capped[omk] = new_ps
+        frame[CAPPED_PULSES] = capped
 
         # ── Check d_perp — only anchor pivot if within D_MAX ──────────────
         lf_pos = np.array([lf.pos.x, lf.pos.y, lf.pos.z])
@@ -316,6 +336,63 @@ class MPEPivotModule(icetray.I3Module):
         self.PushFrame(frame)
 
 
+class IterPivotModule(icetray.I3Module):
+    """Compute pivot anchored from IterMPE direction."""
+    def __init__(self, ctx):
+        super().__init__(ctx)
+
+    def Configure(self): pass
+
+    def Physics(self, frame):
+        if (ITER_MPE_KEY not in frame or "RealDMtCorr" not in frame
+                or "RealDMpos" not in frame or IC_PULSES not in frame):
+            self.PushFrame(frame)
+            return
+
+        iter_mpe = frame[ITER_MPE_KEY]
+        if iter_mpe.fit_status != dataclasses.I3Particle.FitStatus.OK:
+            self.PushFrame(frame)
+            return
+
+        seed_dir = (iter_mpe.dir.x, iter_mpe.dir.y, iter_mpe.dir.z)
+        dm_pos   = np.array([frame["RealDMpos"].x,
+                             frame["RealDMpos"].y,
+                             frame["RealDMpos"].z])
+        dm_t_corrected = frame["RealDMtCorr"].value
+
+        xs, ys, zs, ts, ws = [], [], [], [], []
+        try:
+            ic_map = dataclasses.I3RecoPulseSeriesMap.from_frame(frame, IC_PULSES)
+        except Exception:
+            self.PushFrame(frame)
+            return
+        for omk, plist in ic_map:
+            if omk not in geo_omgeo:
+                continue
+            pos = geo_omgeo[omk].position
+            for p in plist:
+                xs.append(pos.x); ys.append(pos.y); zs.append(pos.z)
+                ts.append(p.time); ws.append(p.charge)
+
+        if len(xs) < 4:
+            self.PushFrame(frame)
+            return
+
+        direction, t0_pivot = pivot_linefit_dm(
+            xs, ys, zs, ts, ws, dm_pos, dm_t_corrected, seed_dir)
+        if direction is None:
+            self.PushFrame(frame)
+            return
+
+        pp = dataclasses.I3Particle()
+        pp.dir    = dataclasses.I3Direction(*direction)
+        pp.pos    = dataclasses.I3Position(*dm_pos)
+        pp.time   = float(t0_pivot)
+        pp.fit_status = dataclasses.I3Particle.FitStatus.OK
+        frame[ITER_PIV_LF_KEY] = pp
+        self.PushFrame(frame)
+
+
 class ScorerModule(icetray.I3Module):
     """Extract results from all reco keys into rows list."""
     def __init__(self, ctx):
@@ -363,14 +440,17 @@ class ScorerModule(icetray.I3Module):
                 return float("nan"), float("nan")
             return math.degrees(p.dir.zenith), math.degrees(p.dir.azimuth)
 
-        lf_zen,       lf_azi       = get_zen_azi("LineFit")
-        piv_lf_zen,   piv_lf_azi   = get_zen_azi(PIV_LF_KEY)
-        piv_mpe_zen,  piv_mpe_azi  = get_zen_azi(PIV_MPE_KEY)
-        mpe_std_zen,  mpe_std_azi  = get_zen_azi(MPE_STD_KEY)
-        mpe_piv_zen,  mpe_piv_azi  = get_zen_azi(MPE_PIV_KEY)
-        mpe_piv2_zen, mpe_piv2_azi = get_zen_azi(MPE_PIV2_KEY)
-        spe_std_zen,  spe_std_azi  = get_zen_azi(SPE_STD_KEY)
-        spe_piv_zen,  spe_piv_azi  = get_zen_azi(SPE_PIV_KEY)
+        lf_zen,           lf_azi           = get_zen_azi(BEST_LF_KEY)
+        piv_lf_zen,       piv_lf_azi       = get_zen_azi(PIV_LF_KEY)
+        piv_mpe_zen,      piv_mpe_azi      = get_zen_azi(PIV_MPE_KEY)
+        mpe_std_zen,      mpe_std_azi      = get_zen_azi(MPE_STD_KEY)
+        mpe_piv_zen,      mpe_piv_azi      = get_zen_azi(MPE_PIV_KEY)
+        mpe_piv2_zen,     mpe_piv2_azi     = get_zen_azi(MPE_PIV2_KEY)
+        spe_std_zen,      spe_std_azi      = get_zen_azi(SPE_STD_KEY)
+        spe_piv_zen,      spe_piv_azi      = get_zen_azi(SPE_PIV_KEY)
+        iter_mpe_zen,     iter_mpe_azi     = get_zen_azi(ITER_MPE_KEY)
+        iter_piv_lf_zen,  iter_piv_lf_azi  = get_zen_azi(ITER_PIV_LF_KEY)
+        iter_piv_mpe_zen, iter_piv_mpe_azi = get_zen_azi(ITER_PIV_MPE_KEY)
 
         rows.append(dict(
             year=year,
@@ -382,14 +462,17 @@ class ScorerModule(icetray.I3Module):
             n_doms_ic=n_doms,
             n_hits_ic=n_hits,
             energy_GeV=round(energy_GeV, 2),
-            lf_zen=round(lf_zen, 4),            lf_azi=round(lf_azi, 4),
-            piv_lf_zen=round(piv_lf_zen, 4),    piv_lf_azi=round(piv_lf_azi, 4),
-            piv_mpe_zen=round(piv_mpe_zen, 4),  piv_mpe_azi=round(piv_mpe_azi, 4),
-            mpe_std_zen=round(mpe_std_zen, 4),  mpe_std_azi=round(mpe_std_azi, 4),
-            mpe_piv_zen=round(mpe_piv_zen, 4),  mpe_piv_azi=round(mpe_piv_azi, 4),
-            mpe_piv2_zen=round(mpe_piv2_zen,4), mpe_piv2_azi=round(mpe_piv2_azi,4),
-            spe_std_zen=round(spe_std_zen, 4),  spe_std_azi=round(spe_std_azi, 4),
-            spe_piv_zen=round(spe_piv_zen, 4),  spe_piv_azi=round(spe_piv_azi, 4),
+            lf_zen=round(lf_zen, 4),                   lf_azi=round(lf_azi, 4),
+            piv_lf_zen=round(piv_lf_zen, 4),           piv_lf_azi=round(piv_lf_azi, 4),
+            piv_mpe_zen=round(piv_mpe_zen, 4),         piv_mpe_azi=round(piv_mpe_azi, 4),
+            mpe_std_zen=round(mpe_std_zen, 4),         mpe_std_azi=round(mpe_std_azi, 4),
+            mpe_piv_zen=round(mpe_piv_zen, 4),         mpe_piv_azi=round(mpe_piv_azi, 4),
+            mpe_piv2_zen=round(mpe_piv2_zen, 4),       mpe_piv2_azi=round(mpe_piv2_azi, 4),
+            spe_std_zen=round(spe_std_zen, 4),         spe_std_azi=round(spe_std_azi, 4),
+            spe_piv_zen=round(spe_piv_zen, 4),         spe_piv_azi=round(spe_piv_azi, 4),
+            iter_mpe_zen=round(iter_mpe_zen, 4),       iter_mpe_azi=round(iter_mpe_azi, 4),
+            iter_piv_lf_zen=round(iter_piv_lf_zen, 4),iter_piv_lf_azi=round(iter_piv_lf_azi, 4),
+            iter_piv_mpe_zen=round(iter_piv_mpe_zen,4),iter_piv_mpe_azi=round(iter_piv_mpe_azi,4),
         ))
         self.PushFrame(frame)
 
@@ -411,13 +494,13 @@ tray.AddModule("I3Reader", FilenameList=[GCD_FILE, IN_FILE])
 
 tray.AddModule(SetupModule, "Setup")
 
-# MPEFit — std seed (LineFit)  [must run before MPEPivotModule]
+# MPEFit — std seed (BestLineFit)  [must run before MPEPivotModule]
 tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
     fitname = MPE_STD_KEY,
     domllh  = "MPE",
     pulses  = IC_PULSES,
-    seeds   = ["LineFit"],
-    If      = lambda f: IC_PULSES in f and "LineFit" in f,
+    seeds   = [BEST_LF_KEY],
+    If      = lambda f: IC_PULSES in f and BEST_LF_KEY in f,
 )
 
 # MPEFit — pivot seed
@@ -441,13 +524,13 @@ tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
     If      = lambda f: IC_PULSES in f and PIV_MPE_KEY in f,
 )
 
-# SPEFit — std seed (LineFit)
+# SPEFit — std seed (BestLineFit)
 tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
     fitname = SPE_STD_KEY,
     domllh  = "SPE1st",
     pulses  = IC_PULSES,
-    seeds   = ["LineFit"],
-    If      = lambda f: IC_PULSES in f and "LineFit" in f,
+    seeds   = [BEST_LF_KEY],
+    If      = lambda f: IC_PULSES in f and BEST_LF_KEY in f,
 )
 
 # SPEFit — pivot seed
@@ -457,6 +540,28 @@ tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
     pulses  = IC_PULSES,
     seeds   = [PIV_LF_KEY],
     If      = lambda f: IC_PULSES in f and PIV_LF_KEY in f,
+)
+
+# IterMPE — 3-iter MPE on charge-capped pulses (avoids GSL gamma overflow)
+tray.Add(icecube.lilliput.segments.I3IterativePandelFitter,
+    fitname      = ITER_MPE_KEY,
+    domllh       = "MPE",
+    pulses       = CAPPED_PULSES,
+    seeds        = [BEST_LF_KEY],
+    n_iterations = 3,
+    If           = lambda f: CAPPED_PULSES in f and BEST_LF_KEY in f,
+)
+
+# Pivot from IterMPE direction + DM-Ice anchor
+tray.AddModule(IterPivotModule, "IterPivot")
+
+# MPEFit seeded from IterPivotLF
+tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
+    fitname = ITER_PIV_MPE_KEY,
+    domllh  = "MPE",
+    pulses  = IC_PULSES,
+    seeds   = [ITER_PIV_LF_KEY],
+    If      = lambda f: IC_PULSES in f and ITER_PIV_LF_KEY in f,
 )
 
 # TruncatedEnergy — seeded from MPEFit pivot (best reco we have)
@@ -481,6 +586,8 @@ df.to_csv(OUT_CSV, index=False)
 
 print(f"\nDone: {len(df)} events (deduplicated)")
 print(f"  With DM-Ice pivot (d⊥ < {D_MAX}m): {df.piv_lf_zen.notna().sum()}")
+print(f"  With IterMPE:      {df.iter_mpe_zen.notna().sum()}")
+print(f"  With IterPivotMPE: {df.iter_piv_mpe_zen.notna().sum()}")
 print(f"  Years: {sorted(df.year.unique())}")
 print(f"  Per year: {df.groupby('year').size().to_dict()}")
 print(f"CSV: {OUT_CSV}")

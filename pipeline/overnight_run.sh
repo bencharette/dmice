@@ -28,7 +28,7 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 log "=== PHASE 1: Recos on fixed file (2012-2019, 8366 events) ==="
 log "  Output: $OUT_DIR/real_all_recos.csv"
 
-$ICETRAY python3 "$DMICE_DIR/run_all_recos_real.py" \
+$ICETRAY python3 "$DMICE_DIR/reco/run_all_recos_real.py" \
     > "$OUT_DIR/real_all_recos_phase1.log" 2>&1
 log "Phase 1 complete."
 
@@ -64,7 +64,7 @@ if [ "$N_COINC" -eq 0 ]; then
 fi
 
 # Merge 2020-2021 into a standalone file
-$ICETRAY python3 "$DMICE_DIR/merge_2020_2021.py" --output "$MERGED_2021" \
+$ICETRAY python3 "$DMICE_DIR/analysis/merge_2020_2021.py" --output "$MERGED_2021" \
     > "$OUT_DIR/merge_2020_2021.log" 2>&1
 log "  Merged file: $MERGED_2021"
 
@@ -115,7 +115,7 @@ log "Phase 3 complete."
 log "=== PHASE 4: Recos on full dataset (2012-2021) ==="
 log "  Output: $OUT_DIR/real_all_recos.csv (overwriting phase 1)"
 
-$ICETRAY python3 "$DMICE_DIR/run_all_recos_real.py" \
+$ICETRAY python3 "$DMICE_DIR/reco/run_all_recos_real.py" \
     > "$OUT_DIR/real_all_recos_phase4.log" 2>&1
 log "Phase 4 complete."
 

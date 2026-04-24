@@ -55,6 +55,10 @@ parser.add_argument("--output", type=str, default=None,
                     help="Output npz path (default auto-named by n-per-bin and n-bins)")
 parser.add_argument("--detector", type=str, default=None, choices=["det1", "det2", "det_center"],
                     help="Lock all events to one DM-Ice detector (default: alternate det1/det2)")
+parser.add_argument("--noise", action="store_true",
+                    help="Add Poisson dark noise to IC DOMs after PPC (700 Hz/DOM, [first-1µs, last+4µs])")
+parser.add_argument("--noise-rate", type=float, default=700.0,
+                    help="Dark noise rate per IC DOM in Hz (default 700)")
 args = parser.parse_args()
 
 # ── Simulation parameters ─────────────────────────────────────────────────────
@@ -182,6 +186,8 @@ for bin_id in range(N_BINS):
             losses = blo.propagate(p, dist_km=PROP_KM)
             hits   = blo.run_ppc(p, losses, suppress_error=True)
             doms   = blo.process_hits(hits)
+            if args.noise:
+                doms = blo.add_noise(doms, noise_rate_hz=args.noise_rate, rng=rng)
         except Exception as exc:
             print(f"  [WARN] bin {bin_id} ev {ev}: {exc}")
             # still store the event with 0 hits so bin counts stay exact

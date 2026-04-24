@@ -92,8 +92,8 @@ fi
 log "=== STEP 3: Submitting coincidence finder jobs (NPX) ==="
 
 # Copy the targeted step3 submit script to NPX and run it
-scp "${DMICE_DIR}/step3_submit_2020_2021.py" npx:~/dmice/ 2>/dev/null || true
-CLUSTER_IDS=$(ssh npx "python3 ~/dmice/step3_submit_2020_2021.py --submit 2>/dev/null" | grep -oP 'cluster \K[0-9]+' || true)
+scp "${DMICE_DIR}/reco/step3_submit_2020_2021.py" npx:~/dmice/reco/ 2>/dev/null || true
+CLUSTER_IDS=$(ssh npx "python3 ~/dmice/reco/step3_submit_2020_2021.py --submit 2>/dev/null" | grep -oP 'cluster \K[0-9]+' || true)
 log "  Submitted clusters: ${CLUSTER_IDS:-none printed, check condor_q}"
 
 log "=== Waiting for step3 condor jobs to finish ==="
@@ -115,7 +115,7 @@ N_COINC=$(find "${STEP3_DIR}/2020" "${STEP3_DIR}/2021" -name "*_coinc.i3.zst" 2>
 log "  Coincidence files found: ${N_COINC}"
 
 MERGED_2020_2021="${BASEDIR}/dmice_coincidences_2020_2021.i3.zst"
-${ICETRAY_ENV} python3 "${DMICE_DIR}/merge_2020_2021.py" --output "${MERGED_2020_2021}"
+${ICETRAY_ENV} python3 "${DMICE_DIR}/analysis/merge_2020_2021.py" --output "${MERGED_2020_2021}"
 
 log "  Merged file: ${MERGED_2020_2021}"
 ls -lh "${MERGED_2020_2021}"

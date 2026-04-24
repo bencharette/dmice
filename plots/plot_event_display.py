@@ -233,9 +233,11 @@ def plot_event(ev_idx, data, det, ice_z_km, ice_be, out_dir):
         cmap = plt.cm.jet
         colors = np.array([]).reshape(0, 4)
 
-    # ── Marker sizes proportional to nhits (sqrt scaling) ────────────────────
+    # ── Marker sizes proportional to nhits (sqrt scaling, capped to avoid
+    #    DM-Ice strings dominating the display with millions of PPC photons)
+    SIZE_CAP = 50.0
     if len(nhits) > 0:
-        sizes = (4.0 * nhits ** (1.0 / 3.0)) ** 2   # matplotlib uses area not radius
+        sizes = (4.0 * np.minimum(nhits, SIZE_CAP) ** (1.0 / 3.0)) ** 2
     else:
         sizes = np.array([])
 

@@ -1,5 +1,5 @@
 executable   = /cvmfs/icecube.opensciencegrid.org/py3-v4.3.0/RHEL_9_x86_64/metaprojects/icetray/v1.12.1/env-shell.sh
-arguments    = python3 /home/bcharett/dmice/run_all_recos_real.py
+arguments    = python3 /home/bcharett/dmice/reco/run_all_recos_real.py
 
 output       = /home/bcharett/dmice_work/output/real_all_recos.out
 error        = /home/bcharett/dmice_work/output/real_all_recos.err

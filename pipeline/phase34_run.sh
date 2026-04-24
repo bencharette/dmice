@@ -25,7 +25,7 @@ N_COINC=$(find "$BASEDIR/step3_coincidences/2020" "$BASEDIR/step3_coincidences/2
 log "  Step3 coincidence files: $N_COINC"
 
 # Merge 2020-2021 into standalone file
-$ICETRAY python3 "$DMICE_DIR/merge_2020_2021.py" --output "$MERGED_2021" \
+$ICETRAY python3 "$DMICE_DIR/analysis/merge_2020_2021.py" --output "$MERGED_2021" \
     > "$OUT_DIR/merge_2020_2021.log" 2>&1
 log "  Merged file written: $MERGED_2021"
 ls -lh "$MERGED_2021"
@@ -75,7 +75,7 @@ log "Phase 3 complete."
 log "=== PHASE 4: Recos on full dataset (2012-2021) ==="
 log "  Output: $OUT_DIR/real_all_recos.csv"
 
-$ICETRAY python3 "$DMICE_DIR/run_all_recos_real.py" \
+$ICETRAY python3 "$DMICE_DIR/reco/run_all_recos_real.py" \
     > "$OUT_DIR/real_all_recos_phase4.log" 2>&1
 
 log "Phase 4 complete."

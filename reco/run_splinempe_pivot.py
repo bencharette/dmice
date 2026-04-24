@@ -691,6 +691,8 @@ class Scorer(icetray.I3Module):
             spe_spat_ang_err   = ang(SPE_SPAT_KEY),     # SPEFit: DM spatial seed
             spe_piv_ang_err    = ang(SPE_PIV),           # SPEFit: DM spatial+time seed
             spe_dm_ang_err     = ang(SPE_DM_KEY),        # SPEFit: DM combined LL (no re-seed)
+            smpe_std_ang_err   = ang(SMPE_STD),          # SplineMPE: standard LineFit seed
+            smpe_piv_ang_err   = ang(SMPE_PIV),          # SplineMPE: pivot LineFit seed
             # DM-Ice log L
             ll_mc              = ll_mc,
             ll_lf              = ll_lf,

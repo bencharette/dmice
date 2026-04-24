@@ -6,7 +6,7 @@ executable      = run_prometheus_condor.sh
 
 # Run from ~/dmice so that ./output/ and ./logs/ resolve correctly,
 # and so ~/prometheus and ~/dmice/output/ppc_tmp are reachable.
-initialdir      = $ENV(HOME)/dmice
+initialdir      = $ENV(HOME)/dmice/sim
 
 log             = $ENV(HOME)/dmice/logs/condor_$(Cluster).log
 output          = $ENV(HOME)/dmice/logs/condor_$(Cluster)_$(Process).out

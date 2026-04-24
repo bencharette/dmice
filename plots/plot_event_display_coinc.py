@@ -124,22 +124,29 @@ def get_om_positions(frame):
 print(f"Opening: {I3_FILE}")
 print(f"GCD:     {args.gcd}")
 
+# ── Load geometry from GCD file ───────────────────────────────────────────────
+om_pos = {}
+gcd_f = dataio.I3File(args.gcd)
+while gcd_f.more():
+    frame = gcd_f.pop_frame()
+    if frame.Stop == icetray.I3Frame.Geometry:
+        om_pos = get_om_positions(frame)
+        print(f"  Geometry loaded: {len(om_pos)} IC OMs")
+        break
+gcd_f.close()
+if not om_pos:
+    print("ERROR: no geometry found in GCD file", file=sys.stderr)
+    sys.exit(1)
+
 pass_events = []   # each entry: dict with all we need to plot
 fail_events = []
-om_pos      = {}   # loaded once from first geometry frame
 seen        = set()
 n_scanned   = 0
 n_target    = N_EVENTS  # how many we want in each group
 
-f = dataio.I3File([args.gcd, I3_FILE])
+f = dataio.I3File(I3_FILE)
 while f.more() and (len(pass_events) < n_target or len(fail_events) < n_target):
     frame = f.pop_frame()
-
-    # Load geometry from G frame
-    if frame.Stop == icetray.I3Frame.Geometry and not om_pos:
-        om_pos = get_om_positions(frame)
-        print(f"  Geometry loaded: {len(om_pos)} IC OMs")
-        continue
 
     if frame.Stop != icetray.I3Frame.Physics:
         continue
@@ -199,6 +206,8 @@ while f.more() and (len(pass_events) < n_target or len(fail_events) < n_target):
             if key_t not in om_pos:
                 continue
             x, y, z = om_pos[key_t]
+            if not pulses:
+                continue
             charge    = sum(p.charge for p in pulses)
             first_t   = min(p.time   for p in pulses)
             hits.append((x, y, z, charge, first_t))

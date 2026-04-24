@@ -8,7 +8,7 @@ BLO_RESOURCE="$HOME/.icevenv/BLO/resources"
 PPC_EXE="$BLO_RESOURCE/PPC_executables/PPC_CUDA/ppc"
 GEO_FILE="$BLO_RESOURCE/geofiles/icecube_with_dmice.geo"
 PPC_TABLES="$BLO_RESOURCE/PPC_tables/south_pole"
-SCRIPT="$HOME/dmice/simulate_muons_offset.py"
+SCRIPT="$HOME/dmice/sim/simulate_muons_offset.py"
 LOGDIR="$HOME/dmice_work/output/logs"
 mkdir -p "$LOGDIR"
 

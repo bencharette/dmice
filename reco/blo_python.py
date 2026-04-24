@@ -38,19 +38,28 @@ from typing import List
 _THIS_DIR    = os.path.dirname(os.path.abspath(__file__))
 _BLO_DIR     = os.path.join(_THIS_DIR, "BlueLightOrchestra.jl")
 _RESOURCE_DIR = os.path.join(_BLO_DIR, "resources")
-_GEO_FILE    = os.environ.get(
-    "BLO_GEO_FILE",
-    os.path.join(_RESOURCE_DIR, "geofiles", "icecube_with_dmice.geo")
-)
-_PPC_TABLES  = os.environ.get(
-    "BLO_PPC_TABLES",
-    os.path.join(_RESOURCE_DIR, "PPC_tables", "south_pole")
+
+def _first_existing(*paths):
+    for p in paths:
+        p = os.path.expanduser(p)
+        if os.path.exists(p):
+            return p
+    return os.path.expanduser(paths[-1])  # fall back to last even if missing
+
+_GEO_FILE = os.environ.get("BLO_GEO_FILE") or _first_existing(
+    os.path.join(_RESOURCE_DIR, "geofiles", "icecube_with_dmice.geo"),
+    "~/.icevenv/BLO/resources/geofiles/icecube_with_dmice.geo",
 )
 
-# PPC binary: override via BLO_PPC_EXE env var, else default cobalt path
-PPC_EXE = os.environ.get(
-    "BLO_PPC_EXE",
-    os.path.expanduser("~/dmice_work/ppc_cpu/ppc")
+_PPC_TABLES = os.environ.get("BLO_PPC_TABLES") or _first_existing(
+    os.path.join(_RESOURCE_DIR, "PPC_tables", "south_pole"),
+    "~/.icevenv/BLO/resources/PPC_tables/south_pole",
+)
+
+# PPC binary: WARD uses CUDA GPU binary; Cobalt uses CPU binary
+PPC_EXE = os.environ.get("BLO_PPC_EXE") or _first_existing(
+    "~/.icevenv/BLO/resources/PPC_executables/PPC_CUDA/ppc",
+    "~/dmice_work/ppc_cpu/ppc",
 )
 
 # PPC applies a fixed z offset to convert IceCube coords to its internal frame
@@ -102,6 +111,9 @@ class PhotonHit:
 
 # ── Geometry ──────────────────────────────────────────────────────────────────
 
+import functools
+
+@functools.lru_cache(maxsize=4)
 def load_detector(geo_file=_GEO_FILE):
     """
     Parse a BLO .geo file and return arrays of DOM positions and IDs.
@@ -471,4 +483,131 @@ def process_hits(hits: List[PhotonHit], geo_file=_GEO_FILE) -> dict:
         "nhits":     nhits,
         "string_id": str_ids,
         "sensor_id": sen_ids,
+    }
+
+
+# ── Dark noise ────────────────────────────────────────────────────────────────
+
+# IceCube DOM dark noise rate from arXiv:1612.05093 (Table 8): ~700 Hz
+_IC_NOISE_RATE_HZ = 700.0
+_IC_STRING_LO     = 1
+_IC_STRING_HI     = 86
+
+
+def add_noise(doms: dict, geo_file: str = _GEO_FILE,
+              noise_rate_hz: float = _IC_NOISE_RATE_HZ,
+              pre_window_ns: float = 1000.0,
+              post_window_ns: float = 4000.0,
+              rng: np.random.Generator = None) -> dict:
+    """
+    Add Poisson dark-noise hits to a simulated event, following the Prometheus
+    noise model (olympus/event_generation/detector.py::generate_noise).
+
+    For each IceCube DOM (strings 1–86), the expected number of noise hits is
+        mu = noise_rate_hz * window_ns * 1e-9
+    sampled from Poisson, then placed uniformly in [t_first - pre_window_ns,
+    t_last + post_window_ns].  DM-Ice strings (87–88) are left untouched.
+
+    Noise hits that land before a DOM's existing signal first-hit update t.
+    Noise-only DOMs are appended to the arrays.
+
+    Parameters
+    ----------
+    doms          : dict returned by process_hits()
+    noise_rate_hz : dark noise rate per DOM [Hz]  (default 700)
+    pre_window_ns : window start relative to first signal hit [ns]
+    post_window_ns: window end relative to last signal hit [ns]
+    rng           : numpy Generator; uses default_rng() if None
+
+    Returns
+    -------
+    Updated doms dict with noise merged in.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    det = load_detector(geo_file)
+
+    # Time window: bracket existing signal hits.
+    # If no signal hits at all, use a fixed ±5 µs window around t=0.
+    if len(doms["t"]) > 0:
+        t_min = float(doms["t"].min()) - pre_window_ns
+        t_max = float(doms["t"].max()) + post_window_ns
+    else:
+        t_min = -pre_window_ns
+        t_max =  post_window_ns
+
+    window_ns  = t_max - t_min
+    mu_per_dom = noise_rate_hz * window_ns * 1e-9   # expected hits per DOM
+
+    # Build lookup for existing signal DOMs
+    sig_t     = dict(zip(zip(doms["string_id"], doms["sensor_id"]), doms["t"]))
+    sig_nhits = dict(zip(zip(doms["string_id"], doms["sensor_id"]), doms["nhits"]))
+
+    # Position lookup from geometry
+    pos_map = {
+        (int(det["string_id"][i]), int(det["sensor_id"][i])): (
+            det["x"][i], det["y"][i], det["z"][i]
+        )
+        for i in range(len(det["x"]))
+    }
+
+    # Restrict to IceCube strings only
+    ic_mask = (det["string_id"] >= _IC_STRING_LO) & (det["string_id"] <= _IC_STRING_HI)
+    ic_strs = det["string_id"][ic_mask].astype(int)
+    ic_sens = det["sensor_id"][ic_mask].astype(int)
+
+    noise_only_keys = []
+    noise_only_t    = []
+    noise_only_n    = []
+
+    for sid, oid in zip(ic_strs, ic_sens):
+        n_noise = int(rng.poisson(mu_per_dom))
+        if n_noise == 0:
+            continue
+        t_hits = rng.uniform(t_min, t_max, size=n_noise)
+        t_earliest = float(t_hits.min())
+
+        key = (sid, oid)
+        if key in sig_t:
+            # Merge: update first-hit time if noise arrives earlier
+            if t_earliest < sig_t[key]:
+                sig_t[key] = t_earliest
+            sig_nhits[key] += n_noise
+        else:
+            noise_only_keys.append(key)
+            noise_only_t.append(t_earliest)
+            noise_only_n.append(n_noise)
+
+    # Rebuild signal arrays from updated dicts (preserves existing order)
+    sig_keys = list(zip(doms["string_id"], doms["sensor_id"]))
+    new_t     = np.array([sig_t[(s, o)]     for s, o in sig_keys])
+    new_nhits = np.array([sig_nhits[(s, o)] for s, o in sig_keys])
+
+    if noise_only_keys:
+        nk = np.array(noise_only_keys)
+        nk_str = nk[:, 0]
+        nk_sen = nk[:, 1]
+        nk_x = np.array([pos_map.get((s, o), (0., 0., 0.))[0] for s, o in noise_only_keys])
+        nk_y = np.array([pos_map.get((s, o), (0., 0., 0.))[1] for s, o in noise_only_keys])
+        nk_z = np.array([pos_map.get((s, o), (0., 0., 0.))[2] for s, o in noise_only_keys])
+
+        return {
+            "x":         np.concatenate([doms["x"],         nk_x]),
+            "y":         np.concatenate([doms["y"],         nk_y]),
+            "z":         np.concatenate([doms["z"],         nk_z]),
+            "t":         np.concatenate([new_t,             np.array(noise_only_t)]),
+            "nhits":     np.concatenate([new_nhits,         np.array(noise_only_n)]),
+            "string_id": np.concatenate([doms["string_id"], nk_str]),
+            "sensor_id": np.concatenate([doms["sensor_id"], nk_sen]),
+        }
+
+    return {
+        "x":         doms["x"],
+        "y":         doms["y"],
+        "z":         doms["z"],
+        "t":         new_t,
+        "nhits":     new_nhits,
+        "string_id": doms["string_id"],
+        "sensor_id": doms["sensor_id"],
     }

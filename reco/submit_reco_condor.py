@@ -18,7 +18,7 @@ import os, sys, argparse, glob
 
 CVMFS     = "/cvmfs/icecube.opensciencegrid.org/py3-v4.3.0"
 ITRAY_VER = "v1.12.1"
-RECO      = os.path.expanduser("~/dmice/run_sim_all_recos.py")
+RECO      = os.path.expanduser("~/dmice/reco/run_sim_all_recos.py")
 USER      = os.environ.get("USER", "bcharett")
 SCRATCH   = f"/scratch/{USER}/dmice_condor/reco"   # Condor logs — must be /scratch
 DATA_BASE = f"/data/user/{USER}/dmice_condor/reco"  # wrappers + output

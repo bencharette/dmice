@@ -572,12 +572,36 @@ tray.Add(icecube.lilliput.segments.I3SinglePandelFitter,
 
 tray.Add(DMCombinedFitModule)
 
-# IterativePandelFit: 2 iterations, SPE1st (more stable than MPE for iterative)
-# then use result as seed for a final MPEFit pass
+# Charge-capped pulses for IterMPE: cap each DOM's charge at MAX_CHARGE.
+# MPE likelihood computes CDF(t)^(N-1) per DOM — large N causes GSL gamma
+# overflow. Capping at 5 PE is numerically safe and physically motivated
+# (additional photons beyond ~5 add little directional information).
+MAX_CHARGE = 5.0
+CAPPED_PULSES = "InIcePulsesCapped"
+
+def cap_charges(frame):
+    if "InIcePulses" not in frame:
+        return
+    orig = dataclasses.I3RecoPulseSeriesMap.from_frame(frame, "InIcePulses")
+    capped = dataclasses.I3RecoPulseSeriesMap()
+    for omk, plist in orig:
+        new_ps = dataclasses.I3RecoPulseSeries()
+        for p in plist:
+            new_p = dataclasses.I3RecoPulse()
+            new_p.time   = p.time
+            new_p.charge = min(p.charge, MAX_CHARGE)
+            new_ps.append(new_p)
+        capped[omk] = new_ps
+    frame[CAPPED_PULSES] = capped
+
+tray.Add(cap_charges, Streams=[icetray.I3Frame.Physics])
+
+# IterativePandelFit: 3 iterations with true MPE on charge-capped pulses.
+# Capping prevents GSL gamma overflow on high-multiplicity events.
 tray.Add(icecube.lilliput.segments.I3IterativePandelFitter,
     fitname      = ITER_MPE_KEY,
-    domllh       = "SPE1st",
-    pulses       = "InIcePulses",
+    domllh       = "MPE",
+    pulses       = CAPPED_PULSES,
     seeds        = ["LineFit"],
     n_iterations = 3,
     If           = lambda f: "LineFit" in f,

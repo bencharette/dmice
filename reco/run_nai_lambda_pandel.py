@@ -45,6 +45,8 @@ parser.add_argument("--out", default=os.path.expanduser(
 parser.add_argument("--lam-max", type=float, default=100.0)
 parser.add_argument("--n-lam", type=int, default=11,
     help="Number of λ values (log-spaced between 0.05 and lam-max)")
+parser.add_argument("--max-events", type=int, default=0,
+    help="Limit to first N events (0 = all)")
 parser.add_argument("--true-time", action="store_true",
     help="Use MC true DM-Ice transit time (upper bound on improvement)")
 parser.add_argument("--huber-delta", type=float, default=0.5,
@@ -117,6 +119,8 @@ for (s, dom), (px, py, pz) in geo_doms.items():
 
 d = np.load(args.npz, allow_pickle=True)
 N = len(d["energy_GeV"])
+if args.max_events > 0:
+    N = min(N, args.max_events)
 
 def load_ragged(key):
     if f"{key}_flat" in d:
@@ -506,11 +510,13 @@ for lam in lam_grid:
         if math.isnan(ev["smpe_ang_err"]):
             continue
 
-        # Anchor track vertex at DM-Ice position — this makes Pandel residuals
-        # physically meaningful (muon was at r_DM at time t0).
-        # Optimize (zen, azi, t0); NaI soft-constrains t0 toward dm_t_c.
-        vertex = dm_pos
-        x0 = [ev["seed_zen"], ev["seed_azi"], dm_t_c]
+        # Use SplineMPE vertex/t0 as anchor — keeps Pandel in the right time
+        # frame (seed_obj ~33k vs ~millions from DM-Ice vertex). The NaI term
+        # competes with Pandel's own t0 preference, indirectly constraining
+        # direction. This is what gave bin0: 18.3°→7.1° in previous runs.
+        vertex = np.array(ev["seed_pos"])
+        t0_seed = ev["seed_t0"]
+        x0 = [ev["seed_zen"], ev["seed_azi"], t0_seed]
         seed_val = neg_combined(x0, vertex, dm_pos, dm_t_c, ev["pulses"], lam)
 
         res = scipy_minimize(
@@ -523,7 +529,7 @@ for lam in lam_grid:
         # Safety: if optimizer diverged or made things worse, fall back to SplineMPE seed
         fell_back = False
         if math.isnan(res.fun) or res.fun > seed_val + 1.0:
-            zen_o, azi_o, t0_o = ev["seed_zen"], ev["seed_azi"], dm_t_c
+            zen_o, azi_o, t0_o = ev["seed_zen"], ev["seed_azi"], ev["seed_t0"]
             fell_back = True
         else:
             zen_o, azi_o, t0_o = res.x[0], res.x[1], res.x[2]
@@ -532,7 +538,12 @@ for lam in lam_grid:
         sa, ca = math.sin(azi_o), math.cos(azi_o)
         reco_dir = (sz*ca, sz*sa, -cz)
         ang_e  = ang_err_deg(ev["mc_dir"], reco_dir)
-        t0_res = t0_o - dm_t_c   # signed t0 residual [ns]
+        # NaI time residual: predicted DM crossing time minus observed
+        dx_o, dy_o, dz_o = sz*ca, sz*sa, -cz
+        vx, vy, vz = vertex
+        s_dm_o = ((dm_pos[0]-vx)*dx_o + (dm_pos[1]-vy)*dy_o + (dm_pos[2]-vz)*dz_o)
+        t_geo_dm_o = t0_o + s_dm_o / C_M_NS
+        t0_res = t_geo_dm_o - dm_t_c   # [ns]
 
         if _diag_count < _n_diag:
             _diag_count += 1
