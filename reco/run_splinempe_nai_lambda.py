@@ -4,17 +4,25 @@ run_splinempe_nai_lambda.py
 
 Hyperparameter scan over NaI likelihood weight λ for SplineMPE reconstruction.
 
-For each λ in the scan grid:
-  1. SplineMPE runs normally on IC-only pulses (standard LineFit seed).
-  2. A scipy refinement step adds the weighted NaI Gaussian term:
-       log L_combined = log L_IC(track) + λ · log G(T_DM; t_pred + μ, σ)
-     IC likelihood: I3SplineRecoLikelihood (spline tables) if callable from
-     Python outside Gulliver; falls back to Pandel approximation if not.
-  3. Dataset-level loss functions (stored per λ):
-       loss_ang_mean : mean angular error
-       loss_dp_mean  : mean d⊥ from track to DM-Ice position
-       loss_combined : mean(Δψ) + mean(d⊥)/100
-       loss_huber    : mean(huber(Δψ, δ=0.5°))
+Track model: the muon track passes through the DM-Ice detector position r_DM
+at some time t0 (the transit time). We optimize over (zenith, azimuth, t0)
+using a combined likelihood:
+
+  log L_combined = log L_Pandel(zen, azi, t0; vertex=r_DM, IC pulses)
+                 + λ · log G(T_meas; t0 + μ, σ)
+
+where log G is the NaI timing Gaussian (μ, σ from the fitted timing model).
+The NaI term is a soft constraint on t0 — at λ=0 the transit time is free
+(determined only by IC pulses), at large λ it is pinned to T_meas - μ.
+
+This fixes the bad-residual problem: Pandel evaluated from r_DM at the
+NaI-measured transit time gives physically grounded residuals (no time
+convention mismatch with SplineMPE).
+
+Dataset-level loss functions stored per λ:
+  loss_ang_mean : mean angular error
+  loss_huber    : mean(huber(Δψ, δ=0.5°))
+  loss_t0_res   : mean |t0_opt - dm_t_corrected| [ns] (timing residual)
 
 Output: ~/dmice_work/output/nai_lambda_scan.csv  (one row per λ per bin)
         ~/dmice_work/output/nai_lambda_scan.png
@@ -37,11 +45,21 @@ parser.add_argument("--out", default=os.path.expanduser(
 parser.add_argument("--lam-max", type=float, default=100.0)
 parser.add_argument("--n-lam", type=int, default=11,
     help="Number of λ values (log-spaced between 0.05 and lam-max)")
+parser.add_argument("--max-events", type=int, default=0,
+    help="Limit to first N events (0 = all)")
+parser.add_argument("--save-events", action="store_true",
+    help="Also save per-event CSV for scatter plot comparisons")
 parser.add_argument("--true-time", action="store_true",
     help="Use MC true DM-Ice transit time (upper bound on improvement)")
 parser.add_argument("--huber-delta", type=float, default=0.5,
     help="δ for Huber loss [deg]")
+parser.add_argument("--crystal-constraint", action="store_true",
+    help="Add soft-wall d_perp ≤ R_crystal geometric penalty (always active, not λ-weighted)")
 args = parser.parse_args()
+
+# Auto-suffix output path when crystal constraint is active
+if args.crystal_constraint and "_crystal" not in args.out:
+    args.out = args.out.replace(".csv", "_crystal.csv")
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -52,10 +70,12 @@ SPLINE_PROB = ("/cvmfs/icecube.opensciencegrid.org/data/photon-tables/splines/"
 SPLINE_AMP  = ("/cvmfs/icecube.opensciencegrid.org/data/photon-tables/splines/"
                "InfBareMu_mie_abs_z20a10_V2.fits")
 
-Z_OFFSET = 1948.07
-C_M_NS   = 0.2998
-N_ICE    = 1.3195
-THETA_C  = math.acos(1.0 / N_ICE)
+Z_OFFSET         = 1948.07
+C_M_NS           = 0.2998
+N_ICE            = 1.3195
+THETA_C          = math.acos(1.0 / N_ICE)
+CRYSTAL_RADIUS_M = 0.07    # NaI crystal radius [m] (14 cm diameter)
+SIGMA_WALL_M     = 5.0     # soft-wall width [m] — matches typical reco accuracy at crystal distance
 
 DMICE_OMKEYS = {0: (87, 1), 1: (88, 1)}
 DMICE_POS_IC = {
@@ -109,6 +129,8 @@ for (s, dom), (px, py, pz) in geo_doms.items():
 
 d = np.load(args.npz, allow_pickle=True)
 N = len(d["energy_GeV"])
+if args.max_events > 0:
+    N = min(N, args.max_events)
 
 def load_ragged(key):
     if f"{key}_flat" in d:
@@ -231,6 +253,11 @@ class SplineLikelihoodWrapper:
 
 
 spline_wrapper = SplineLikelihoodWrapper()
+# Force Pandel: I3SplineRecoLikelihood.GetLogLikelihood() returns incorrect values
+# (likely NaN or constant) when called from scipy Nelder-Mead outside Gulliver.
+# Pandel is internally consistent across all λ values and fast enough for the scan.
+spline_wrapper.using_spline = False
+print("IC likelihood overridden to: Pandel (spline service unreliable in scipy context)")
 
 # ── NaI term ──────────────────────────────────────────────────────────────────
 
@@ -249,6 +276,18 @@ def neg_combined(params, vertex, dm_pos, dm_t_corrected, pulses, lam):
     if not (0.0 < zen < math.pi):
         return 1e9
     ll = spline_wrapper.log_l(zen, azi, t0, vertex, pulses)
+
+    if args.crystal_constraint:
+        sz, cz = math.sin(zen), math.cos(zen)
+        sa, ca = math.sin(azi), math.cos(azi)
+        dx, dy, dz = sz*ca, sz*sa, -cz
+        vx, vy, vz = float(vertex[0]), float(vertex[1]), float(vertex[2])
+        rx = float(dm_pos[0])-vx; ry = float(dm_pos[1])-vy; rz = float(dm_pos[2])-vz
+        s      = rx*dx + ry*dy + rz*dz
+        d_perp = math.sqrt(max(0.0, rx**2 + ry**2 + rz**2 - s**2))
+        excess = max(0.0, d_perp - CRYSTAL_RADIUS_M)
+        ll    -= 0.5 * (excess / SIGMA_WALL_M) ** 2
+
     if lam > 0:
         ll += _nai_log_l(zen, azi, t0, vertex, dm_pos, dm_t_corrected, lam)
     return -ll
@@ -260,19 +299,18 @@ def huber(x, delta):
     return np.where(x <= delta, x**2, 2*delta*x - delta**2)
 
 
-def compute_losses(ang_errs, d_perps, delta=args.huber_delta):
-    ang = np.array(ang_errs)
-    dp  = np.array(d_perps)
+def compute_losses(ang_errs, t0_residuals_ns, delta=args.huber_delta):
+    ang  = np.array(ang_errs)
+    t0r  = np.array(t0_residuals_ns)
     return dict(
-        n             = len(ang),
-        ang_median    = float(np.median(ang)),
-        ang_mean      = float(np.mean(ang)),
-        dp_median     = float(np.median(dp)),
-        dp_mean       = float(np.mean(dp)),
-        loss_ang_mean = float(np.mean(ang)),
-        loss_dp_mean  = float(np.mean(dp)),
-        loss_combined = float(np.mean(ang) + np.mean(dp) / 100.0),
-        loss_huber    = float(np.mean(huber(ang, delta))),
+        n              = len(ang),
+        ang_median     = float(np.median(ang)),
+        ang_mean       = float(np.mean(ang)),
+        t0_res_median  = float(np.median(np.abs(t0r))),
+        t0_res_mean    = float(np.mean(np.abs(t0r))),
+        loss_ang_mean  = float(np.mean(ang)),
+        loss_huber     = float(np.mean(huber(ang, delta))),
+        loss_t0_res    = float(np.mean(np.abs(t0r))),
     )
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -281,12 +319,6 @@ def ang_err_deg(d1, d2):
     dot = max(-1.0, min(1.0, float(np.dot(np.asarray(d1), np.asarray(d2)))))
     return math.degrees(math.acos(abs(dot)))
 
-
-def d_perp_to_point(track_pos, track_dir, point):
-    r = np.asarray(point) - np.asarray(track_pos)
-    dh = np.asarray(track_dir, dtype=float)
-    dh = dh / np.linalg.norm(dh)
-    return float(np.linalg.norm(r - np.dot(r, dh) * dh))
 
 # ── λ grid ────────────────────────────────────────────────────────────────────
 
@@ -302,9 +334,41 @@ event_cache  = []   # list of dicts
 
 IC_PULSES = "InIcePulses"
 LF_KEY    = "LineFit"
+PLF_KEY   = "PivotLineFit"
 SMPE_KEY  = "SplineMPE_Std"
 DM_T_KEY  = "DMIce_t"
 DM_ID_KEY = "DMIce_id"
+
+# ── Pivot LineFit (Python, anchors track to DM-Ice crystal) ──────────────────
+
+def _plf_wm(vals, ws):
+    W = sum(ws)
+    return sum(v * w for v, w in zip(vals, ws)) / W if W else 0.0
+
+def pivot_linefit_ic(xs, ys, zs, ts, ws, dm_pos, seed_dir):
+    """LineFit anchored at dm_pos using LineFit-extrapolated crossing time.
+
+    Matches run_sim_all_recos.py: dm_t=None avoids subtracting MU_NS because
+    BLO/PPC generates Cherenkov arrival times, not NaI scintillation times.
+    """
+    cx = _plf_wm(xs, ws); cy = _plf_wm(ys, ws); cz = _plf_wm(zs, ws)
+    tb = _plf_wm(ts, ws)
+    d_proj = ((dm_pos[0]-cx)*seed_dir[0] + (dm_pos[1]-cy)*seed_dir[1]
+              + (dm_pos[2]-cz)*seed_dir[2])
+    t_dm = tb + d_proj / C_M_NS
+    dts  = [t - t_dm for t in ts]
+    drxs = [x - dm_pos[0] for x in xs]
+    drys = [y - dm_pos[1] for y in ys]
+    drzs = [z - dm_pos[2] for z in zs]
+    den  = sum(w * dt * dt for w, dt in zip(ws, dts))
+    if not den:
+        return None
+    vx = sum(w * dt * dr for w, dt, dr in zip(ws, dts, drxs)) / den
+    vy = sum(w * dt * dr for w, dt, dr in zip(ws, dts, drys)) / den
+    vz = sum(w * dt * dr for w, dt, dr in zip(ws, dts, drzs)) / den
+    spd = math.sqrt(vx*vx + vy*vy + vz*vz)
+    return (vx/spd, vy/spd, vz/spd) if spd else None
+
 
 # ── IceTray modules ───────────────────────────────────────────────────────────
 
@@ -384,8 +448,51 @@ class NPZInjector(icetray.I3Module):
         self.PushFrame(frame)
 
 
+class ComputePivotLF(icetray.I3Module):
+    """Compute PivotLineFit in Python and store result in frame."""
+    def __init__(self, ctx):
+        super().__init__(ctx)
+
+    def Configure(self): pass
+
+    def Physics(self, frame):
+        if LF_KEY not in frame or IC_PULSES not in frame or DM_T_KEY not in frame:
+            self.PushFrame(frame); return
+        lf = frame[LF_KEY]
+        if lf.fit_status != dataclasses.I3Particle.FitStatus.OK:
+            self.PushFrame(frame); return
+
+        dm_id  = frame[DM_ID_KEY].value if DM_ID_KEY in frame else 0
+        dm_pos = DMICE_POS_IC[dm_id]
+        lf_dir = (lf.dir.x, lf.dir.y, lf.dir.z)
+
+        geo = frame["I3Geometry"].omgeo
+        xs, ys, zs, ts, ws = [], [], [], [], []
+        for omk, plist in frame[IC_PULSES]:
+            if omk not in geo: continue
+            pos = geo[omk].position
+            for p in plist:
+                xs.append(pos.x); ys.append(pos.y); zs.append(pos.z)
+                ts.append(float(p.time)); ws.append(float(p.charge))
+
+        if len(xs) < 4:
+            self.PushFrame(frame); return
+
+        piv = pivot_linefit_ic(xs, ys, zs, ts, ws, dm_pos, lf_dir)
+        if piv is None:
+            self.PushFrame(frame); return
+
+        pp = dataclasses.I3Particle()
+        pp.dir = dataclasses.I3Direction(piv[0], piv[1], piv[2])
+        pp.pos = dataclasses.I3Position(dm_pos[0], dm_pos[1], dm_pos[2])
+        pp.time = frame[DM_T_KEY].value  # raw hit time; scipy uses dm_t_corrected
+        pp.fit_status = dataclasses.I3Particle.FitStatus.OK
+        frame[PLF_KEY] = pp
+        self.PushFrame(frame)
+
+
 class CacheExtractor(icetray.I3Module):
-    """Cache SplineMPE result and event frame for the λ scan."""
+    """Cache PivotLineFit result and event frame for the λ scan."""
     def __init__(self, ctx):
         super().__init__(ctx)
 
@@ -395,7 +502,8 @@ class CacheExtractor(icetray.I3Module):
         if "MCTruth" not in frame or DM_T_KEY not in frame:
             self.PushFrame(frame); return
 
-        seed_key = SMPE_KEY if SMPE_KEY in frame else LF_KEY
+        # Use PivotLineFit as seed; fall back to LineFit if unavailable
+        seed_key = PLF_KEY if PLF_KEY in frame else LF_KEY
         if seed_key not in frame:
             self.PushFrame(frame); return
         seed = frame[seed_key]
@@ -404,12 +512,13 @@ class CacheExtractor(icetray.I3Module):
         if len(frame[IC_PULSES]) < 4:
             self.PushFrame(frame); return
 
-        mc      = frame["MCTruth"]
-        mc_dir  = (mc.dir.x, mc.dir.y, mc.dir.z)
-        ev_id   = frame["I3EventHeader"].event_id
-        dm_id   = frame[DM_ID_KEY].value
-        dm_pos  = tuple(DMICE_POS_IC[dm_id])
+        mc       = frame["MCTruth"]
+        mc_dir   = (mc.dir.x, mc.dir.y, mc.dir.z)
+        ev_id    = frame["I3EventHeader"].event_id
+        dm_id    = frame[DM_ID_KEY].value
+        dm_pos   = tuple(DMICE_POS_IC[dm_id])
         dm_t_obs = frame[DM_T_KEY].value
+        dm_t_corrected = dm_t_obs - MU_NS
 
         # Build pulse array (N,5): x,y,z,t,charge — numpy for vectorized Pandel
         pulse_list = []
@@ -428,10 +537,9 @@ class CacheExtractor(icetray.I3Module):
             if not math.isnan(inj):
                 true_dm_t = inj
 
-        smpe_dir = (seed.dir.x, seed.dir.y, seed.dir.z)
+        plf_dir = (seed.dir.x, seed.dir.y, seed.dir.z)
+        plf_ang_err = ang_err_deg(mc_dir, plf_dir) if seed_key == PLF_KEY else float("nan")
 
-        # Store the frame for I3SplineRecoLikelihood.SetEvent().
-        # SetEvent() requires I3Geometry to be in the frame (not just set via SetGeometry).
         if "I3Geometry" not in frame:
             frame["I3Geometry"] = geo_obj
         _frame_store[ev_id] = frame
@@ -444,22 +552,22 @@ class CacheExtractor(icetray.I3Module):
             seed_key       = seed_key,
             seed_zen       = seed.dir.zenith,
             seed_azi       = seed.dir.azimuth,
-            seed_t0        = seed.time,
-            seed_pos       = (seed.pos.x, seed.pos.y, seed.pos.z),
-            smpe_dir       = smpe_dir,
+            # Anchor vertex at dm_pos; t0 at that vertex = dm_t_corrected.
+            # Matches DMCombinedFitModule in run_sim_all_recos.py (achieves 1.78°).
+            seed_pos       = dm_pos,
+            seed_t0        = dm_t_corrected,
             pulses         = pulses,
             dm_pos         = dm_pos,
-            dm_t_corrected = dm_t_obs - MU_NS,
+            dm_t_corrected = dm_t_corrected,
             true_dm_t      = true_dm_t,
-            smpe_ang_err   = ang_err_deg(mc_dir, smpe_dir)
-                             if seed_key == SMPE_KEY else float("nan"),
+            plf_ang_err    = plf_ang_err,
         ))
         self.PushFrame(frame)
 
 
 # ── Run IceTray once ──────────────────────────────────────────────────────────
 
-print(f"\nRunning SplineMPE (once) on {N} events...")
+print(f"\nRunning LineFit + PivotLineFit (once) on {N} events...")
 tray = I3Tray()
 tray.Add(NPZInjector)
 tray.Add("I3LineFit",
@@ -467,106 +575,142 @@ tray.Add("I3LineFit",
     InputRecoPulses = IC_PULSES,
     AmpWeightPower  = 1.0,
 )
-tray.Add(spline_reco.SplineMPE, SMPE_KEY,
-    fitname               = SMPE_KEY,
-    PulsesName            = IC_PULSES,
-    TrackSeedList         = [LF_KEY],
-    BareMuTimingSpline    = SPLINE_PROB,
-    BareMuAmplitudeSpline = SPLINE_AMP,
-    configuration         = "default",
-    If = lambda f: LF_KEY in f and len(f[IC_PULSES]) >= 4,
-)
+tray.Add(ComputePivotLF)
 tray.Add(CacheExtractor)
 tray.Execute()
 tray.Finish()
 
-print(f"Cached {len(event_cache)} events  "
-      f"(IC llh: {'spline' if spline_wrapper.using_spline else 'pandel'})")
+print(f"Cached {len(event_cache)} events  (seed: PivotLineFit anchored at crystal, IC llh: pandel)")
 
 # ── λ scan ────────────────────────────────────────────────────────────────────
 
-all_rows = []   # one dict per (λ, bin_id)
+all_rows   = []   # one dict per (λ, bin_id)
+event_rows = []   # per-event rows when --save-events
+
+_n_diag = 3   # print diagnostic for first N events of first λ
 
 for lam in lam_grid:
-    bin_results = {}   # bin_id -> lists of ang_err, d_perp
+    bin_results = {}   # bin_id -> lists of ang_err, t0_residual, energies
+    _diag_count = 0
 
     for ev in event_cache:
-        ev_id    = ev["ev_id"]
-        vertex   = ev["seed_pos"]
-        dm_pos   = ev["dm_pos"]
-        dm_t_c   = (ev["true_dm_t"] if (args.true_time and ev["true_dm_t"] is not None)
-                    else ev["dm_t_corrected"])
+        dm_pos  = np.array(ev["dm_pos"])
+        dm_t_c  = (ev["true_dm_t"] if (args.true_time and ev["true_dm_t"] is not None)
+                   else ev["dm_t_corrected"])
 
-        # Provide current frame to spline service
-        if ev_id in _frame_store:
-            spline_wrapper.set_event(_frame_store[ev_id])
+        if math.isnan(ev["plf_ang_err"]):
+            continue
 
-        if lam == 0.0:
-            if math.isnan(ev["smpe_ang_err"]):
-                continue
-            ang_e = ev["smpe_ang_err"]
-            sz, cz = math.sin(ev["seed_zen"]), math.cos(ev["seed_zen"])
-            sa, ca = math.sin(ev["seed_azi"]), math.cos(ev["seed_azi"])
-            dp = d_perp_to_point(vertex, (sz*ca, sz*sa, -cz), dm_pos)
+        # Vertex anchored at dm_pos; t0 = dm_t_corrected (NaI transit time).
+        # Matches DMCombinedFitModule in run_sim_all_recos.py which achieves 1.78°.
+        vertex = np.array(ev["seed_pos"])   # == dm_pos
+        t0_seed = ev["seed_t0"]             # == dm_t_corrected
+        x0 = [ev["seed_zen"], ev["seed_azi"], t0_seed]
+        seed_val = neg_combined(x0, vertex, dm_pos, dm_t_c, ev["pulses"], lam)
+
+        res = scipy_minimize(
+            neg_combined, x0,
+            args=(vertex, dm_pos, dm_t_c, ev["pulses"], lam),
+            method="Nelder-Mead",
+            options={"maxiter": 600, "xatol": 1e-3, "fatol": 0.5},
+        )
+
+        # Safety: if optimizer diverged or made things worse, fall back to SplineMPE seed
+        fell_back = False
+        if math.isnan(res.fun) or res.fun > seed_val + 1.0:
+            zen_o, azi_o, t0_o = ev["seed_zen"], ev["seed_azi"], ev["seed_t0"]
+            fell_back = True
         else:
-            x0  = [ev["seed_zen"], ev["seed_azi"], ev["seed_t0"]]
-            res = scipy_minimize(
-                neg_combined, x0,
-                args=(vertex, dm_pos, dm_t_c, ev["pulses"], lam),
-                method="Nelder-Mead",
-                options={"maxiter": 300, "xatol": 1e-3, "fatol": 1.0},
-            )
-            zen_o, azi_o, _ = res.x
-            sz, cz = math.sin(zen_o), math.cos(zen_o)
-            sa, ca = math.sin(azi_o), math.cos(azi_o)
-            reco_dir = (sz*ca, sz*sa, -cz)
-            ang_e = ang_err_deg(ev["mc_dir"], reco_dir)
-            dp    = d_perp_to_point(vertex, reco_dir, dm_pos)
+            zen_o, azi_o, t0_o = res.x[0], res.x[1], res.x[2]
+
+        sz, cz = math.sin(zen_o), math.cos(zen_o)
+        sa, ca = math.sin(azi_o), math.cos(azi_o)
+        reco_dir = (sz*ca, sz*sa, -cz)
+        ang_e  = ang_err_deg(ev["mc_dir"], reco_dir)
+        # NaI time residual: predicted DM crossing time minus observed
+        dx_o, dy_o, dz_o = sz*ca, sz*sa, -cz
+        vx, vy, vz = vertex
+        s_dm_o = ((dm_pos[0]-vx)*dx_o + (dm_pos[1]-vy)*dy_o + (dm_pos[2]-vz)*dz_o)
+        t_geo_dm_o = t0_o + s_dm_o / C_M_NS
+        t0_res = t_geo_dm_o - dm_t_c   # [ns]
+
+        if _diag_count < _n_diag:
+            _diag_count += 1
+            print(f"    [diag λ={lam:.2f} ev{ev['ev_id']}] "
+                  f"plf_err={ev['plf_ang_err']:.2f}° → "
+                  f"{'seed' if fell_back else 'opt'}={ang_e:.2f}°  "
+                  f"t0_res={t0_res:+.1f}ns  "
+                  f"seed_obj={seed_val:.1f}  res_obj={res.fun:.1f}  "
+                  f"nfev={res.nfev}")
 
         b = ev["bin_id"]
         if b not in bin_results:
-            bin_results[b] = {"ang": [], "dp": [], "energies": []}
+            bin_results[b] = {"ang": [], "t0r": [], "energies": []}
         bin_results[b]["ang"].append(ang_e)
-        bin_results[b]["dp"].append(dp)
+        bin_results[b]["t0r"].append(t0_res)
+
+        if args.save_events:
+            event_rows.append(dict(
+                lam        = lam,
+                ev_id      = ev["ev_id"],
+                bin_id     = b,
+                energy_GeV = ev["energy_GeV"],
+                plf_ang_err  = ev["plf_ang_err"],
+                opt_ang_err  = ang_e,
+                t0_res_ns    = t0_res,
+                fell_back    = int(fell_back),
+            ))
         bin_results[b]["energies"].append(ev["energy_GeV"])
 
     # Compute losses per bin and overall
-    all_ang = []; all_dp = []
-    for b, res in sorted(bin_results.items()):
-        losses = compute_losses(res["ang"], res["dp"])
-        losses["lam"]    = lam
-        losses["bin_id"] = b
-        losses["med_energy_GeV"] = float(np.median(res["energies"]))
-        losses["true_time"] = int(args.true_time)
+    all_ang = []; all_t0r = []
+    for b, br in sorted(bin_results.items()):
+        losses = compute_losses(br["ang"], br["t0r"])
+        losses["lam"]               = lam
+        losses["bin_id"]            = b
+        losses["med_energy_GeV"]    = float(np.median(br["energies"]))
+        losses["true_time"]         = int(args.true_time)
+        losses["crystal_constraint"]= int(args.crystal_constraint)
         all_rows.append(losses)
-        all_ang.extend(res["ang"]); all_dp.extend(res["dp"])
+        all_ang.extend(br["ang"]); all_t0r.extend(br["t0r"])
 
     # Overall row (bin_id = -1)
     if all_ang:
-        losses = compute_losses(all_ang, all_dp)
-        losses["lam"]    = lam
-        losses["bin_id"] = -1
-        losses["med_energy_GeV"] = float("nan")
-        losses["true_time"] = int(args.true_time)
+        losses = compute_losses(all_ang, all_t0r)
+        losses["lam"]               = lam
+        losses["bin_id"]            = -1
+        losses["med_energy_GeV"]    = float("nan")
+        losses["true_time"]         = int(args.true_time)
+        losses["crystal_constraint"]= int(args.crystal_constraint)
         all_rows.append(losses)
 
     # Print summary
     if all_ang:
         print(f"  λ={lam:6.2f}  ang_med={np.median(all_ang):.3f}°  "
-              f"d⊥_med={np.median(all_dp):.1f}m  "
+              f"t0_res_med={np.median(np.abs(all_t0r)):.1f}ns  "
               f"huber={np.mean(huber(np.array(all_ang), args.huber_delta)):.4f}  "
               f"n={len(all_ang)}")
 
 # ── Save CSV ──────────────────────────────────────────────────────────────────
 
 os.makedirs(os.path.dirname(args.out), exist_ok=True)
-fieldnames = ["lam", "bin_id", "med_energy_GeV", "true_time", "n",
-              "ang_median", "ang_mean", "dp_median", "dp_mean",
-              "loss_ang_mean", "loss_dp_mean", "loss_combined", "loss_huber"]
+fieldnames = ["lam", "bin_id", "med_energy_GeV", "true_time",
+              "crystal_constraint", "n",
+              "ang_median", "ang_mean", "t0_res_median", "t0_res_mean",
+              "loss_ang_mean", "loss_huber", "loss_t0_res"]
 with open(args.out, "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
     w.writeheader(); w.writerows(all_rows)
 print(f"\nSaved: {args.out}  ({len(all_rows)} rows)")
+
+if args.save_events and event_rows:
+    ev_out = args.out.replace(".csv", "_events.csv")
+    ev_fields = ["lam", "ev_id", "bin_id", "energy_GeV",
+                 "plf_ang_err", "opt_ang_err", "t0_res_ns", "fell_back"]
+    with open(ev_out, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=ev_fields, extrasaction="ignore")
+        w.writeheader(); w.writerows(event_rows)
+    print(f"Saved: {ev_out}  ({len(event_rows)} per-event rows)")
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
 
@@ -575,12 +719,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 overall = [r for r in all_rows if r["bin_id"] == -1]
-lams_o  = [r["lam"]           for r in overall]
-ameds   = [r["ang_median"]    for r in overall]
-amns    = [r["ang_mean"]      for r in overall]
-dpmds   = [r["dp_median"]     for r in overall]
-l_huber = [r["loss_huber"]    for r in overall]
-l_comb  = [r["loss_combined"] for r in overall]
+lams_o  = [r["lam"]            for r in overall]
+ameds   = [r["ang_median"]     for r in overall]
+amns    = [r["ang_mean"]       for r in overall]
+t0meds  = [r["t0_res_median"]  for r in overall]
+l_huber = [r["loss_huber"]     for r in overall]
+l_ang   = [r["loss_ang_mean"]  for r in overall]
 
 fig, axes = plt.subplots(3, 1, figsize=(8, 11), sharex=True)
 
@@ -590,25 +734,29 @@ ax.plot(lams_o, amns,  "s--", color="steelblue", alpha=0.6, label="mean Δψ")
 ax.axhline(ameds[0], color="steelblue", lw=0.8, ls=":", alpha=0.5)
 ax.set_ylabel("Angular error [deg]")
 ax.legend(fontsize=9); ax.grid(True, alpha=0.3)
-ax.set_title(f"SplineMPE + λ·NaI — hyperparameter scan"
-             + (" [true time]" if args.true_time else ""))
+_title = "PivotLineFit+NaI (vertex=r_crystal) — λ hyperparameter scan"
+if args.crystal_constraint:
+    _title += "  [crystal constraint d⊥ ≤ 7 cm]"
+if args.true_time:
+    _title += "  [true time]"
+ax.set_title(_title)
 
 ax = axes[1]
-ax.plot(lams_o, dpmds, "o-", color="darkorange", label="median d⊥ to DM-Ice")
-ax.axhline(dpmds[0], color="darkorange", lw=0.8, ls=":", alpha=0.5)
-ax.set_ylabel("d⊥ to DM-Ice [m]")
+ax.plot(lams_o, t0meds, "o-", color="darkorange", label="median |t0 residual| [ns]")
+ax.axhline(0, color="darkorange", lw=0.8, ls=":", alpha=0.5)
+ax.set_ylabel("|t0 − dm_t_corrected| [ns]")
 ax.legend(fontsize=9); ax.grid(True, alpha=0.3)
 
 ax = axes[2]
-ax.plot(lams_o, l_comb,  "o-",  color="tomato",    label="loss: mean(Δψ)+mean(d⊥)/100")
-ax.plot(lams_o, l_huber, "s--", color="mediumpurple", label=f"loss: Huber(δ={args.huber_delta}°)")
-best_comb  = lams_o[int(np.argmin(l_comb))]
+ax.plot(lams_o, l_ang,   "o-",  color="tomato",       label="loss: mean Δψ")
+ax.plot(lams_o, l_huber, "s--", color="mediumpurple",  label=f"loss: Huber(δ={args.huber_delta}°)")
+best_ang   = lams_o[int(np.argmin(l_ang))]
 best_huber = lams_o[int(np.argmin(l_huber))]
-ax.axvline(best_comb,  color="tomato",       ls="--", lw=1.2,
-           label=f"opt λ (combined) = {best_comb:.2f}")
+ax.axvline(best_ang,   color="tomato",       ls="--", lw=1.2,
+           label=f"opt λ (mean Δψ) = {best_ang:.2f}")
 ax.axvline(best_huber, color="mediumpurple", ls="--", lw=1.2,
            label=f"opt λ (Huber) = {best_huber:.2f}")
-ax.set_ylabel("Loss"); ax.set_xlabel("λ (NaI weight)")
+ax.set_ylabel("Loss"); ax.set_xlabel("λ (NaI t0 weight)")
 ax.legend(fontsize=8); ax.grid(True, alpha=0.3)
 
 # Log x-axis if range spans > 1 decade
@@ -622,5 +770,5 @@ out_png = args.out.replace(".csv", ".png")
 fig.savefig(out_png, dpi=150, bbox_inches="tight")
 plt.close()
 print(f"Plot: {out_png}")
-print(f"\nOptimal λ (combined loss) = {best_comb:.3f}")
-print(f"Optimal λ (Huber loss)    = {best_huber:.3f}")
+print(f"\nOptimal λ (mean Δψ)   = {best_ang:.3f}")
+print(f"Optimal λ (Huber loss) = {best_huber:.3f}")

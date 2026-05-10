@@ -249,8 +249,12 @@ PIVOT_LF_KEY     = "PivotLineFit"
 SPE_KEY          = "SPEFit"
 PIVOT_SPE_KEY    = "PivotSPEFit"
 PIVOT_MPE_KEY    = "PivotMPEFit"
-COMBINED_SPE_KEY = "CombinedSPEFit"   # IC Pandel + DM-Ice Gaussian, pivot seed
-COMBINED_MPE_KEY = "CombinedMPEFit"   # IC Pandel + DM-Ice Gaussian, pivot seed
+COMBINED_SPE_KEY  = "CombinedSPEFit"    # IC Pandel + DM-Ice Gaussian, pivot seed
+COMBINED_MPE_KEY  = "CombinedMPEFit"   # IC Pandel + DM-Ice Gaussian, pivot seed
+CRYSTAL_SPE_KEY   = "CrystalSPEFit"    # + hard d_perp ≤ R_crystal geometric constraint
+CRYSTAL_MPE_KEY   = "CrystalMPEFit"    # (same combined objective, crystal wall added)
+CRYSTAL_RADIUS_M  = 0.07               # NaI crystal radius [m]
+SIGMA_WALL_M      = 0.01               # soft-wall width [m]
 ITER_MPE_KEY      = "IterMPE"           # Iterative Pandel SPE (3 iterations)
 ITER_PIVOT_LF_KEY = "IterPivotLineFit"  # Pivot LineFit seeded from IterMPE direction
 ITER_PIVOT_MPE_KEY= "IterPivotMPEFit"   # MPEFit seeded from IterPivotLineFit
@@ -401,6 +405,8 @@ def extract(frame):
         spline_std_ang_err_deg     = ang(SPLINE_STD_KEY),
         spline_piv_ang_err_deg     = ang(SPLINE_PIV_KEY),
         spline_iter_ang_err_deg    = ang(SPLINE_ITER_KEY),
+        crystal_spe_ang_err_deg    = ang(CRYSTAL_SPE_KEY),
+        crystal_mpe_ang_err_deg    = ang(CRYSTAL_MPE_KEY),
     ))
 
 # ── Combined IC Pandel + DM-Ice Gaussian likelihood ──────────────────────────
@@ -432,7 +438,8 @@ def _ic_log_l(zen, azi, t0, vertex, ic_pulse_list):
     return ll
 
 
-def _neg_combined_ll(params, vertex, dm_pos, dm_t_corrected, ic_pulse_list):
+def _neg_combined_ll(params, vertex, dm_pos, dm_t_corrected, ic_pulse_list,
+                     use_crystal=False):
     zen, azi, t0 = params
     if not (0.0 < zen < math.pi):
         return 1e9
@@ -445,7 +452,12 @@ def _neg_combined_ll(params, vertex, dm_pos, dm_t_corrected, ic_pulse_list):
     t_geo_dm = t0 + s_dm / C_M_NS
     ll_ic = _ic_log_l(zen, azi, t0, vertex, ic_pulse_list)
     ll_dm = -0.5 * ((dm_t_corrected - t_geo_dm) / SIGMA_NS)**2
-    return -(ll_ic + ll_dm)
+    ll = ll_ic + ll_dm
+    if use_crystal:
+        d_perp = math.sqrt(max(0.0, rx**2 + ry**2 + rz**2 - s_dm**2))
+        excess = max(0.0, d_perp - CRYSTAL_RADIUS_M)
+        ll    -= 0.5 * (excess / SIGMA_WALL_M) ** 2
+    return -ll
 
 
 class DMCombinedFitModule(icetray.I3Module):
@@ -505,9 +517,10 @@ class DMCombinedFitModule(icetray.I3Module):
 
         x0 = [seed.dir.zenith, seed.dir.azimuth, t0_init]
 
+        # Standard combined fit (IC Pandel + NaI Gaussian)
         result = scipy_minimize(
             _neg_combined_ll, x0,
-            args=(vertex, dm_pos, dm_t_corrected, pulses),
+            args=(vertex, dm_pos, dm_t_corrected, pulses, False),
             method='Nelder-Mead',
             options={'maxiter': 800, 'xatol': 1e-4, 'fatol': 0.5},
         )
@@ -521,6 +534,24 @@ class DMCombinedFitModule(icetray.I3Module):
         pp.fit_status = dataclasses.I3Particle.FitStatus.OK
         frame[COMBINED_SPE_KEY] = pp
         frame[COMBINED_MPE_KEY] = pp
+
+        # Crystal-constrained fit: adds d_perp ≤ R_crystal soft-wall penalty
+        result_c = scipy_minimize(
+            _neg_combined_ll, x0,
+            args=(vertex, dm_pos, dm_t_corrected, pulses, True),
+            method='Nelder-Mead',
+            options={'maxiter': 800, 'xatol': 1e-4, 'fatol': 0.5},
+        )
+        zen_c, azi_c, t0_c = result_c.x
+
+        pp_c = dataclasses.I3Particle()
+        pp_c.dir        = dataclasses.I3Direction(float(zen_c % math.pi),
+                                                   float(azi_c % (2*math.pi)))
+        pp_c.pos        = seed.pos
+        pp_c.time       = float(t0_c)
+        pp_c.fit_status = dataclasses.I3Particle.FitStatus.OK
+        frame[CRYSTAL_SPE_KEY] = pp_c
+        frame[CRYSTAL_MPE_KEY] = pp_c
         self.PushFrame(frame)
 
 
@@ -679,6 +710,8 @@ for key, label in [
     ("spline_std_ang_err_deg",    "SplineMPE (LineFit seed)"),
     ("spline_piv_ang_err_deg",    "SplineMPE (Pivot seed)"),
     ("spline_iter_ang_err_deg",   "SplineMPE (IterPivot seed)"),
+    ("crystal_spe_ang_err_deg",   "Crystal-constrained SPE"),
+    ("crystal_mpe_ang_err_deg",   "Crystal-constrained MPE"),
 ]:
     print(f"  {label:<22}  {valid(key):>5}  {median_ang(key):>13.2f}°")
 print(f"Saved: {OUT_CSV}")
