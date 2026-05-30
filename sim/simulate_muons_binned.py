@@ -59,6 +59,9 @@ parser.add_argument("--noise", action="store_true",
                     help="Add Poisson dark noise to IC DOMs after PPC (700 Hz/DOM, [first-1µs, last+4µs])")
 parser.add_argument("--noise-rate", type=float, default=700.0,
                     help="Dark noise rate per IC DOM in Hz (default 700)")
+parser.add_argument("--full-hits", action="store_true",
+                    help="Also save all individual photon times per DOM (dom_all_t). "
+                         "Makes file ~10-50x larger.")
 args = parser.parse_args()
 
 # ── Simulation parameters ─────────────────────────────────────────────────────
@@ -92,6 +95,7 @@ _det_suffix  = f"_{args.detector}" if args.detector else ""
 _default_out = os.path.join(output_dir, f"muons_binned_{N_BINS}bins_{N_PER_BIN}pbin{_det_suffix}.npz")
 output_file = args.output if args.output else _default_out
 os.makedirs(output_dir, exist_ok=True)
+os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
 
 # ── NaI direct ionization timing model ───────────────────────────────────────
 # Real DM-Ice detects muons via direct ionization/scintillation in NaI crystal,
@@ -116,6 +120,7 @@ ev_dom_str, ev_dom_sen       = [], []
 ev_dm_t_injected  = []   # analytically injected DM-Ice hit time [ns]
 ev_dm_t_ppc       = []   # DM-Ice hit time from PPC (NaN if PPC missed)
 ev_smt8_triggered = []   # bool: passed SMT8 HLC trigger (≥8 LC hits in 5 µs)
+ev_dom_all_t      = []   # all photon times per DOM (only populated with --full-hits)
 
 # ── Print bin table ───────────────────────────────────────────────────────────
 
@@ -188,6 +193,16 @@ for bin_id in range(N_BINS):
             doms   = blo.process_hits(hits)
             if args.noise:
                 doms = blo.add_noise(doms, noise_rate_hz=args.noise_rate, rng=rng)
+            if args.full_hits:
+                # group all raw photon times by (string_id, sensor_id)
+                _ph = {}
+                for h in hits:
+                    _ph.setdefault((h.string_id, h.sensor_id), []).append(h.time_ns)
+                # same DOM order as process_hits output (sorted by first appearance)
+                all_t = np.empty(len(doms["string_id"]), dtype=object)
+                for i, (sid, oid) in enumerate(zip(doms["string_id"], doms["sensor_id"])):
+                    all_t[i] = np.array(sorted(_ph.get((int(sid), int(oid)), [])))
+                ev_dom_all_t.append(all_t)
         except Exception as exc:
             print(f"  [WARN] bin {bin_id} ev {ev}: {exc}")
             # still store the event with 0 hits so bin counts stay exact
@@ -195,6 +210,8 @@ for bin_id in range(N_BINS):
                     "t": np.array([]), "nhits": np.array([]),
                     "string_id": np.array([], dtype=int),
                     "sensor_id": np.array([], dtype=int)}
+            if args.full_hits:
+                ev_dom_all_t.append(np.empty(0, dtype=object))
 
         # Extract PPC DM-Ice time (NaN if PPC didn't fire those strings)
         dm_str = 87 if target == "det1" else 88
@@ -257,6 +274,8 @@ np.savez(
     dm_t_injected_ns = np.array(ev_dm_t_injected,  dtype=float),
     dm_t_ppc_ns      = np.array(ev_dm_t_ppc,       dtype=float),
     smt8_triggered   = np.array(ev_smt8_triggered, dtype=bool),
+    **( {"dom_all_t": np.array(ev_dom_all_t, dtype=object)}
+        if args.full_hits else {} ),
 )
 
 print(f"[INFO] Done — {N_BINS * N_PER_BIN} events saved.")
