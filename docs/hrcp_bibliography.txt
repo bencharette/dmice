@@ -1,0 +1,35 @@
+Bibliography
+
+Muon-Induced Background in the Unanalyzed Years of the DM-Ice17 Dark Matter Detector
+Ben Charette - Harvard College Research Program, Fall 2026
+
+
+1. Bernabei, R., et al. (DAMA/LIBRA Collaboration). (2018). First model independent
+   results from DAMA/LIBRA-phase2. Universe, 4(11), 116.
+   doi: 10.3390/universe4110116
+
+2. Cherwinka, J., et al. (DM-Ice Collaboration). (2014). First data from DM-Ice17.
+   Physical Review D, 90, 092005. doi: 10.1103/PhysRevD.90.092005
+
+3. Aartsen, M. G., et al. (IceCube Collaboration). (2017). The IceCube Neutrino
+   Observatory: Instrumentation and online systems. Journal of Instrumentation, 12,
+   P03012. doi: 10.1088/1748-0221/12/03/P03012
+
+4. Cherwinka, J., et al. (DM-Ice Collaboration). (2016). Measurement of muon annual
+   modulation and muon-induced phosphorescence in NaI(Tl) crystals with DM-Ice17.
+   Physical Review D. arXiv:1509.02486
+
+5. Adhikari, G., et al. (COSINE-100 Collaboration). (2018). An experiment to search
+   for dark-matter interactions using sodium iodide detectors. Nature, 564, 83-86.
+   doi: 10.1038/s41586-018-0739-1
+
+6. Hubbard, A. J. F. (2015). Muon-Induced Backgrounds in the DM-Ice17 NaI(Tl) Dark
+   Matter Detector (PhD thesis). University of Wisconsin-Madison.
+
+7. Tilav, S., et al. (IceCube Collaboration). (2010). Atmospheric variations as
+   observed by IceCube. arXiv:1001.0776
+
+
+Note: in the proposal, journal names and the thesis title are italicized.
+Reference 4 is cited from the arXiv preprint; add the Physical Review D volume
+and article number if you want the published citation.
