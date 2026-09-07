@@ -8,202 +8,205 @@
 \usepackage{times}
 \usepackage{microtype}
 \usepackage{titlesec}
+\usepackage{enumitem}
 \usepackage[hidelinks]{hyperref}
 
-\titlespacing*{\section}{0pt}{6pt}{2pt}
-\titleformat{\section}{\normalfont\bfseries}{\thesection.}{0.5em}{}
+\titlespacing*{\section}{0pt}{8pt}{2pt}
+\titleformat{\section}{\normalfont\bfseries}{\thesection.}{0.6em}{}
 \setlength{\parskip}{0pt}
 \setlength{\parindent}{0.4in}
 
 \begin{document}
-\doublespacing
 
 \begin{center}
-{\bfseries How Much of a Dark Matter Signal Is Really Cosmic Rays?}\\
-{\bfseries Muon-Induced Background and Veto Efficiency in the DM-Ice17 Signal Region}\\[2pt]
-{\normalsize Ben Charette \quad$\cdot$\quad Faculty Mentor: Prof.\ Carlos A.\ Arg\"uelles Delgado, Department of Physics}
+{\large\bfseries Muon-Induced Background in the Unanalyzed Years}\\[2pt]
+{\large\bfseries of the DM-Ice17 Dark Matter Detector}\\[8pt]
+{\normalsize Ben Charette \quad$\cdot$\quad September 2026}
 \end{center}
 
-\vspace{-6pt}
+\vspace{2pt}
+\doublespacing
+
+\section{Background and State of the Field}
+
+Dark matter makes up roughly a quarter of the universe's energy content, yet it has
+never been detected in a laboratory. For more than two decades one experiment has
+claimed otherwise. DAMA/LIBRA, operating beneath the Gran Sasso mountain in Italy, uses
+crystals of thallium-doped sodium iodide, NaI(Tl), a material that emits a brief flash
+of light when a particle deposits energy in it. DAMA reports that its rate of very
+low-energy flashes rises and falls once per year, peaking near June~2, and interprets
+this as the Earth's orbital motion carrying its detector through a galactic halo of
+dark matter particles: in June the Earth moves into the oncoming wind of dark matter,
+in December it moves with it, and the collision rate should follow [1].
+
+No other experiment has confirmed the result, and the central objection is mundane.
+Laboratories also have seasons. Temperature, humidity, radon concentration, and the
+flux of cosmic-ray muons through the rock all vary annually, and any of them could
+imprint a yearly cycle on a detector. Distinguishing a galactic signal from a
+terrestrial one therefore comes down to \emph{phase}. A dark matter signal is set by
+the Earth's orbit and keeps its June maximum everywhere on the planet, while most
+environmental effects follow the local seasons and invert in the southern hemisphere.
+
+DM-Ice17 was built to exploit exactly that asymmetry [2]. It consists of two 8.5\,kg
+NaI(Tl) crystals deployed in 2010 at the bottom of two strings of the IceCube Neutrino
+Observatory and frozen permanently into the Antarctic ice at 2450\,m depth. IceCube
+instruments a cubic kilometre of that ice with thousands of light sensors in order to
+detect neutrinos [3]; muons---heavy, short-lived relatives of the electron, produced
+when cosmic rays strike the upper atmosphere---penetrate deeply enough to reach the
+array constantly and are IceCube's dominant background. For DM-Ice17 this arrangement
+is a gift: it is the only NaI dark matter detector ever operated inside an active
+cubic-kilometre muon telescope, so the particles passing through its crystals can be
+identified independently by the surrounding array.
+
+The published DM-Ice muon analysis established three things [4]. Muons cross each
+crystal about 2.93 times per day; that rate modulates by $12.3 \pm 1.7\%$ and peaks
+around January~22, in austral summer, four months from the DAMA phase; and muons
+leave behind a faint afterglow in the crystal, phosphorescence with a decay time of
+$5.5 \pm 0.5$\,s, which the authors characterized as noise and argued cannot reproduce
+the DAMA signal. Crucially, that analysis used 3.5 years of data and stops in January
+2015, two months after the crystals' photomultiplier gain was raised roughly tenfold.
+Twelve years of data were taken. Fewer than four have ever been analyzed, and the
+unanalyzed years are the ones the modern dark matter search would use.
 
 \section{Objective, Significance, and Implications}
 
-For more than two decades the DAMA/LIBRA experiment in Italy has reported that the
-low-energy event rate in its sodium-iodide dark matter detector rises and falls once a
-year, peaking near June~2, and has interpreted this as the Earth's orbit sweeping
-through a galactic halo of dark matter particles. No other experiment has reproduced
-it, and the central objection is mundane: laboratories also have seasons. Temperature,
-radon, and cosmic-ray muon flux all vary annually, and any of them could imprint a
-yearly cycle on such a detector.
+My objective is to extend the characterization of muons and muon-induced background
+into the unanalyzed 2015--2020 high-gain era, and to convert the known existence of
+afterglow into a quantitative statement about a dark matter search: \textbf{what
+fraction of events in the 2--6\,keV electron-equivalent (keVee) signal region is
+muon-induced, what fraction of that an IceCube veto removes, and at what cost in
+lost exposure.}
 
-DM-Ice17 is the instrument built to attack that ambiguity. It is a pair of 8.5\,kg
-thallium-doped NaI crystals frozen into the Antarctic ice at 2450\,m depth at the
-bottom of two IceCube Neutrino Observatory strings, and it is the only NaI dark matter
-detector ever operated inside a cubic-kilometre muon telescope---which means its
-dominant seasonal background can be tagged independently, event by event, by the
-surrounding array.
+This goes beyond the published work in two specific ways. First, coverage: the
+tenfold gain change did not merely shift a calibration, it inverted the behavior of
+the pulse-shape parameter used to identify muons, which is why no selection was ever
+published for those years. I have already solved that problem, so the era is now
+open for the first time. Second, framing: the published measurement established that
+phosphorescence exists and decays in about 5.5 seconds, but treated it as a noise
+source rather than asking how much of it survives a low-energy event selection and
+lands inside the signal region. Those are different questions, and only the second
+one bears on whether a June-phase signal could be environmental.
 
-Over the past summer I established that the muon flux through DM-Ice modulates by
-$10.2\% \pm 1.6\%$, peaking in late January, $13.4\sigma$ away from the DAMA phase, and
-I recovered a muon selection for the 2015--2020 high-gain era that no published
-analysis had reached. But the muon flux is not what a dark matter search sees. Muons
-deposit far too much energy to be mistaken for dark matter directly; the way they can
-contaminate a signal is \emph{indirectly}, through the delayed tail of that
-deposition---scintillator afterglow and phosphorescence, which arrives at low energy,
-can persist long after the muon has passed, and carries the muon's seasonal time
-structure into the region where a dark matter signal would appear.
+I want to be direct about what this cannot do. With 17\,kg of crystal, DM-Ice17 will
+never outmeasure DAMA/LIBRA's roughly 250\,kg at a lower threshold, and this project
+will not produce a competitive dark matter limit. Its value is that DM-Ice17 is the
+only place where the muon-induced contribution to a NaI signal region, and the
+effectiveness of an active veto against it, can be \emph{measured} rather than
+simulated---numbers that feed directly into the successor experiment, COSINE-100 [5],
+and into any future veto-instrumented NaI deployment.
 
-My objective this term is to measure that channel directly: \textbf{how much of the
-low-energy background in the DM-Ice17 signal region is muon-induced, with what decay
-time, what fraction of it an IceCube veto removes and at what dead-time cost, and
-whether the surviving low-energy rate modulates annually and at what phase.}
+\section{Research Plan and Methodology}
 
-The significance is not that DM-Ice17 will out-measure DAMA---with 17\,kg it never
-will, against roughly two orders of magnitude more exposure at a lower threshold. Its
-lasting value is that it is the only place where the muon-induced contribution to a NaI
-signal region, and the effectiveness of an active muon veto against it, can be measured
-at all rather than simulated. Those two numbers are a direct input to the
-DM-Ice$\rightarrow$COSINE-100 program and a design parameter for any future
-veto-instrumented NaI deployment. A secondary implication is archival: every published
-DM-Ice muon analysis stops in January 2015, two months after the photomultiplier gain
-was raised roughly tenfold, so most of the exposure has never been characterized at
-all.
+\noindent\textbf{Preparation already completed.} This is a continuation of work I
+began last summer, and its infrastructure is built and validated. I reduced the full
+2011--2022 dataset---2.38 billion recorded events---into a compact columnar form, and
+built the first true live-time database for DM-Ice in the group's code base, covering
+95{,}174 runs. Applying the published method to the low-gain era, I recover a muon rate
+of $2.918 \pm 0.038$ per crystal per day and a flux modulation of $10.2 \pm 1.6\%$
+peaking on day $30 \pm 9$, all consistent within uncertainties with the published
+$2.93 \pm 0.04$, $12.3 \pm 1.7\%$, and January~22 [4]---my evidence that the pipeline
+is trustworthy. I then diagnosed why a naive transfer of that selection to the
+high-gain era overcounted muons by a factor of 751, and fixed it with a discriminant
+not previously used on these data, reaching 0.95 efficiency and 0.93 purity.
 
-\section{Preparation Completed}
+\noindent\textbf{Step 1 (weeks 1--2): establish the low-energy threshold.} My own
+calibration notes flag that a feature previously identified as a 46.5\,keV lead-210
+line is more likely the detector's trigger turn-on, its width being far too narrow for
+a real line. Because everything downstream depends on it, I will first measure where
+the turn-on actually lies and define the lowest defensible analysis band from the data
+rather than from the literature.
 
-This is a continuation, and the load-bearing infrastructure exists and is validated. I
-have built a stitched waveform-summary extraction over the full 2011--2022 run
-(2.38 billion events reduced to 136 columnar files), which solves the problem that
-high-gain signals span three digitizer channels with no single channel covering the
-full gamma-to-muon range. I built the first real DM-Ice live-time database in the
-group's code base---per-run active spans across 95{,}174 runs, giving 1635 low-gain and
-2328 high-gain live-days per detector---replacing the calendar-day approximation every
-prior script used. I reproduced the published pulse-shape muon populations as a
-baseline, then diagnosed and fixed a $751\times$ over-count when that selection was
-transferred to the high-gain era, reaching $2.918 \pm 0.038$ muons/crystal/day at
-efficiency 0.949 and purity 0.933, statistically indistinguishable from the low-gain
-benchmark at $0.03\sigma$. I hold a frozen 218-event IceCube-coincidence muon sample
-and a low-gain energy calibration validated by the 600\,keV thallium/bismuth line.
-Every ingredient this term's measurement consumes---muon tags, an energy scale,
-live-time, and IceCube coincidence---is already in hand.
+\noindent\textbf{Step 2 (weeks 3--6): measure afterglow leakage into the signal
+region.} For each of roughly a thousand tagged muons per year per detector, I will
+count low-energy events in delayed windows following the muon and compare them against
+randomized control windows drawn from the same runs. Because both window classes are
+drawn from identical live-time, the comparison is self-normalizing and immune to the
+live-time uncertainties that dominate any rate measurement. This yields the
+muon-induced fraction of the signal-region rate and its decay profile, which I can
+check against the published 5.5\,s constant as a validation.
 
-\section{Detailed Research Plan}
+\noindent\textbf{Step 3 (weeks 7--9): veto efficiency and its cost.} Using the muon
+sample tagged by IceCube, I will compute what fraction of that leakage an active veto
+removes as a function of the veto window length, together with the exposure sacrificed.
+At three muons per crystal per day, even a 30-second window costs roughly a tenth of a
+percent of exposure, so I expect the interesting result to be how much background it
+buys.
 
-\noindent\textbf{WP1 --- Energy threshold and signal-region definition (weeks 1--2).}
-One precondition has to be settled before anything else, and it is cheap. My own
-calibration notes flag that a feature previously fit as the 46.5\,keV $^{210}$Pb line
-is more likely the detector's trigger turn-on, its width being far too narrow for a
-real line at that energy. If the turn-on sits at tens of keV in this reduction, a
-2--6\,keV electron-equivalent (keVee) band contains too few events to work with. I will
-convert the low-gain energy column using the validated calibration, plot the spectrum,
-locate the turn-on, and define the lowest defensible analysis band from the data rather
-than from the literature. \emph{Deliverable:} a measured threshold and a stated signal
-region, which every subsequent step inherits.
+\noindent\textbf{Step 4 (weeks 10--13): extend to the high-gain era.} Low-energy
+events in the high-gain years are digitized on a channel my current reduction does not
+carry, so extending Steps 2 and 3 past 2015 requires a re-extraction that I have
+written and tested on a subsample. This is the novel-coverage half of the project and I
+will launch it in week 1 to run unattended, but I have deliberately placed it after a
+complete low-gain result so that a storage bottleneck cannot cost me the term.
 
-\noindent\textbf{WP2 --- Muon-induced background in the signal region (the headline).}
-For each of roughly a thousand tagged muons per year per detector, I will count
-low-energy events in delayed windows following the muon, spanning microseconds to
-hours, and compare against randomized control windows drawn from the same runs. The
-control windows are the key methodological choice: because signal and control windows
-come from the same live-time, the comparison is self-normalizing, so this measurement
-is immune to the live-time systematic that dominates any rate or modulation fit. From
-the excess and its time dependence I extract the muon-induced leakage fraction into the
-signal region and the afterglow decay constant.
+\noindent\textbf{Step 5 (weeks 14--15): one open systematic, and write-up.} The 2015
+muon rate sits well below 2016--2020 and is not a selection artifact; I will test
+whether per-run live-time is overestimated because it cannot resolve dead time within a
+run. I will then write an internal collaboration note and draft a conference abstract.
 
-\noindent\textbf{WP3 --- IceCube veto rejection efficiency and dead-time cost.} Using
-the IceCube-coincident muon sample, I will compute what fraction of the WP2 leakage a
-veto actually removes as a function of the veto time window, and the exposure lost to
-that window. This converts WP2's physics number into an operational one: how much
-muon-induced background an active veto eliminates, and what it costs. It also uses
-DM-Ice17's unique feature for the purpose it was deployed for.
+\section{Timeline}
 
-\noindent\textbf{WP4 --- Annual modulation of the residual low-energy rate.} On
-live-time-normalized day-of-year histograms of non-muon-tagged events inside the WP1
-band, I will fit $R(t) = R_0[1 + A\cos(2\pi(t - t_0)/365)]$ per detector, with all cuts
-fixed before the phase is examined. Interpreted against WP2's leakage fraction, this
-answers whether any low-energy modulation is consistent with a muon origin, and reports
-an amplitude limit if the data are consistent with no modulation.
-
-\noindent\textbf{WP5 --- Parallel extension and one open systematic.} Running
-unattended alongside the above, an ATWD0-equivalent re-extraction (already written and
-tested on a subsample) would extend WP2 and WP4 to the 2328 high-gain live-days, where
-low-energy events are digitized on a channel my current reduction does not carry. This
-is deliberately \emph{not} on the critical path: it is the most storage-intensive piece
-of the project, and the low-gain era alone supports a complete result. Separately, the
-2015 high-gain muon rate sits $12.5\sigma$ below 2016--2020 and is demonstrably not a
-selection artifact; I will test whether per-run live-time is overestimated because it
-cannot resolve intra-run dead time, which must be settled before any high-gain rate
-claim.
-
-\noindent\textbf{Risks and fallbacks.} If WP1 finds the threshold too high for a
-2--6\,keVee band, WP2 and WP4 move to the lowest usable band and the leakage
-measurement proceeds unchanged---this is why WP2 rather than the modulation fit is the
-headline. If the high-gain re-extraction does not finish, WP5 is simply dropped without
-touching the primary result. All selections live in a single canonical module so no two
-scripts can disagree about a cut, and IceCube coincidence remains available throughout
-as an independent hard label.
-
-\section{Time Frame (September--December 2026)}
-
-I plan on 10--12 hours per week; long extractions run unattended on IceCube's Cobalt
-and NPX systems, so compute time does not compete with coursework.
-
-\noindent\textbf{Weeks 1--2 (Sep 8--19):} WP1 threshold and band definition; launch the
-WP5 extraction in the background. \emph{Milestone 1: measured threshold, reviewed with
-my mentor.}
-
-\noindent\textbf{Weeks 3--7 (Sep 22--Oct 24):} WP2 delayed-window analysis, including
-the control-window construction and systematic checks.
-\emph{Milestone 2: muon-induced leakage fraction and decay constant.}
-
-\noindent\textbf{Weeks 8--10 (Oct 27--Nov 14):} WP3 veto rejection efficiency and
-dead-time curve; present WP2--WP3 at group meeting.
-
-\noindent\textbf{Weeks 11--13 (Nov 17--Dec 5):} WP4 modulation fit and its
-interpretation against the leakage fraction; fold in WP5 if the extraction has landed.
-
-\noindent\textbf{Weeks 14--15 (Dec 8--19):} 2015 live-time systematic; write an internal
-DM-Ice/IceCube analysis note, draft a conference abstract, and submit the final report.
+The Harvard term runs from early September to mid-December, and I can commit 10 to 12
+hours per week. Long extractions run unattended on IceCube's Cobalt and NPX computing
+systems, so the heaviest computation does not compete with coursework. The five steps
+above are scheduled across weeks 1--2, 3--6, 7--9, 10--13, and 14--15 respectively,
+with two review points: a measured threshold at the end of week 2, and the
+muon-induced leakage fraction at the end of week 6, each discussed with my mentor
+before I build on it. I will present Steps 2 and 3 to the group in early November. The
+project is deliberately ordered so that a complete, self-contained result exists by
+week 9 even if the high-gain extension in Step 4 does not finish.
 
 \section{Faculty Involvement and Support Network}
 
-My faculty mentor is Prof.\ Carlos A.\ Arg\"uelles Delgado (Department of Physics), who
-leads Harvard's IceCube group and has supervised this project throughout. He sets the
-physics scope and priorities, reviews results at each milestone, and has previously
-required me to freeze and defend a completed analysis in writing before moving on---a
-practice that produced the wrap-up memo underpinning this proposal. He supervises
-through weekly group meetings and regular one-on-one meetings, provides the IceCube
-Collaboration channel through which this work receives internal review, and provides
-the computing access the project depends on: IceCube's Cobalt and NPX systems and the
-group's GPU allocation on the FAS research cluster. An early decision I will bring to
-him is whether to frame the term's output primarily as a background-characterization
-result for the collaboration or as a modulation measurement, which affects emphasis in
-WP4.
+My faculty mentor is Dr.\ Carlos Arg\"uelles-Delgado, who leads Harvard's IceCube group
+and has supervised this project throughout. I attend his weekly group meetings on
+Tuesdays from 3--5pm, where the state of the whole lab is discussed, and I will meet
+with him one-on-one at least four times over the term, including at the two review
+points above. He sets the physics priorities, and he has previously required me to
+freeze and defend a completed analysis in writing before moving on---a practice that
+produced the memo this proposal is built from. He also provides the access the project
+depends on: IceCube's Cobalt and NPX systems, the group's allocation on the FAS
+research cluster, and the IceCube Collaboration channel through which any result of
+mine receives internal review before publication.
 
-Day-to-day technical supervision comes from the group's postdoctoral researcher, Felix
-Yu, who has defined several of the tasks I have already completed---including the
-simulation energy-floor characterization and the IceCube MuonFilter overlap check---and
-who advises on reconstruction and machine-learning methods. Beyond the group, the
-IceCube Collaboration's internal review process provides external scrutiny before
-publication, and the DM-Ice and COSINE-100 literature, especially A.~J.~F.\ Hubbard's
-2015 thesis, provides the published pulse-shape baseline against which every step of my
-selection is validated. I also maintain written session handoffs across the three
-machines this analysis runs on, which keeps the work auditable by my mentor and
-reproducible by whoever inherits it.
+For day-to-day technical guidance I have weekly check-ins, at minimum, with Dr.\ Felix
+Yu, a postdoc in the group whose work on reconstruction methods overlaps my own and who
+defined several of the tasks I completed last summer; I will adjust that frequency to my
+needs as the term progresses. Working in the department's Laboratory for Particle
+Physics and Cosmology also puts me among the other students on the team, which has been
+the most reliable way I have found to learn techniques that are not written down
+anywhere. One question I will bring to my mentor early is whether to frame the term's
+output primarily as a background-characterization result for the collaboration or as a
+modulation measurement, since that affects how much weight Step 4 should carry.
 
-\vspace{6pt}
+\section{Citations}
 \begin{spacing}{1.0}
-\noindent\rule{\textwidth}{0.4pt}\vspace{2pt}
-\footnotesize
-\noindent\textbf{Selected references.} A.~J.~F.\ Hubbard, \emph{Muon-Induced
-Backgrounds in the DM-Ice17 NaI(Tl) Dark Matter Detector}, PhD thesis, University of
-Wisconsin--Madison (2015). $\cdot$ J.\ Cherwinka \emph{et al.} (DM-Ice), ``First data
-from DM-Ice17,'' Phys.\ Rev.\ D \textbf{90}, 092005 (2014). $\cdot$ R.\ Bernabei
-\emph{et al.} (DAMA/LIBRA), ``First model-independent results from DAMA/LIBRA-phase2,''
-Universe \textbf{4}, 116 (2018). $\cdot$ G.\ Adhikari \emph{et al.} (COSINE-100), ``An
-experiment to search for dark-matter interactions using sodium iodide detectors,''
-Nature \textbf{564}, 83 (2018). $\cdot$ S.\ Tilav \emph{et al.} (IceCube),
-``Atmospheric variations as observed by IceCube,'' arXiv:1001.0776 (2010).
+\begin{enumerate}[leftmargin=*,itemsep=3pt]
+\item Bernabei, R., et al. (DAMA/LIBRA Collaboration). (2018). First model independent
+results from DAMA/LIBRA-phase2. \emph{Universe}, 4(11), 116.
+doi: 10.3390/universe4110116
+
+\item Cherwinka, J., et al. (DM-Ice Collaboration). (2014). First data from DM-Ice17.
+\emph{Physical Review D}, 90, 092005. doi: 10.1103/PhysRevD.90.092005
+
+\item Aartsen, M. G., et al. (IceCube Collaboration). (2017). The IceCube Neutrino
+Observatory: instrumentation and online systems. \emph{Journal of Instrumentation},
+12, P03012. doi: 10.1088/1748-0221/12/03/P03012
+
+\item Cherwinka, J., et al. (DM-Ice Collaboration). (2016). Measurement of muon annual
+modulation and muon-induced phosphorescence in NaI(Tl) crystals with DM-Ice17.
+\emph{Physical Review D}. arXiv:1509.02486
+
+\item Adhikari, G., et al. (COSINE-100 Collaboration). (2018). An experiment to search
+for dark-matter interactions using sodium iodide detectors. \emph{Nature}, 564, 83--86.
+doi: 10.1038/s41586-018-0739-1
+
+\item Hubbard, A. J. F. (2015). \emph{Muon-Induced Backgrounds in the DM-Ice17 NaI(Tl)
+Dark Matter Detector}. PhD thesis, University of Wisconsin--Madison.
+
+\item Tilav, S., et al. (IceCube Collaboration). (2010). Atmospheric variations as
+observed by IceCube. arXiv:1001.0776
+\end{enumerate}
 \end{spacing}
 
 \end{document}
